@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>课藏 · 作业工作台</title><link rel="stylesheet" href="/board.css"><script src="/board.js" defer></script>
+</head>
+<body>
+  <header><div class="bar"><b>课藏</b><nav aria-label="主导航"><a aria-current="page" href="/">作业工作台</a><a href="/library">本地文件目录</a></nav></div></header>
+  <main>
+    <div class="intro"><div><p class="kicker">我的课程 / 作业</p><h1>作业工作台</h1></div><button id="refresh">↻ 刷新本地文件</button></div>
+    <p id="notice" role="status">正在读取作业与本地文件…</p>
+    <section aria-label="下载预清理">
+      <details id="cleanup-panel"><summary>下载收件箱 · 预清理 <span id="cleanup-count"></span></summary>
+        <p>超过六个自然月未使用、且未关联作业的下载文件可移入预清理。保留原子目录，可恢复原位。查看后可在资源管理器中自行删除。</p>
+        <p class="muted">使用时间结合系统访问、修改、创建时间及课藏关联、导出记录估算；Windows 的访问记录可能不完整。课藏扫描不计为使用。</p>
+        <p id="cleanup-folder" class="path"></p>
+        <button type="button" id="cleanup-move">将半年未用文件移入预清理</button>
+        <p id="cleanup-result" role="status"></p><div id="cleanup-files"></div>
+      </details>
+    </section>
+    <section id="alerts" aria-label="未完成提醒" hidden><div class="card-head"><h2>未完成提醒 <span id="alert-count"></span></h2><button id="more-alerts" hidden>展开全部</button></div><p class="muted" id="alert-note"></p><div class="task-grid" id="urgent-tasks"></div><details id="dismissed-reminders" hidden><summary></summary><p class="muted">已自行处理或无需完成的作业不再提醒，也不计入待完成数。可随时恢复。</p><div id="dismissed-list"></div></details></section>
+    <section aria-label="平台课程目录">
+      <button id="back-courses" hidden>← 全部课程</button>
+      <div class="card-head"><h2 id="directory-title">平台课程目录</h2><input type="search" id="task-search" aria-label="搜索课程或作业" placeholder="搜索课程或作业"></div>
+      <p class="muted" id="directory-info"></p>
+      <div class="directory-controls"><div class="input-row"><label for="platform-filter">平台</label><select id="platform-filter"><option value="">全部平台</option><option>雨课堂</option><option>学习通</option></select>
+      <label for="list-status">作业状态</label><select id="list-status"><option value="">全部状态</option><option value="unfinished">未完成</option><option value="unknown">待核实</option><option value="completed">已完成</option><option value="missed">过期未做</option><option value="dismissed">无需提醒</option></select></div>
+      <div id="directory-sort" class="directory-sort">
+        <label>优先学期 <select id="preferred-term"><option value="">本学期</option></select></label>
+        <label>课程排序 <select id="course-sort"><option value="work">待完成数 · 从多到少</option><option value="time">开课时间 · 从新到旧</option><option value="name">课程名称 · 拼音顺序</option></select></label>
+      </div></div>
+      <div id="task-list"></div>
+      <button type="button" id="toggle-directory" aria-controls="task-list" aria-expanded="false" hidden></button>
+    </section>
+    <section id="sync-panel" aria-label="平台同步"><div class="card-head"><h2>平台同步</h2><div><button id="sync-start" disabled>正在检查连接…</button> <button id="sync-stop" disabled>暂停接收</button></div></div><p id="sync-message" role="status"></p><p id="sync-error" role="alert"></p><p id="sync-scope" class="muted"></p><p id="sync-time" class="muted"></p>
+      <p id="feed-status" class="muted"></p>
+      <p id="cx-status" class="muted" role="status"></p>
+      <details id="course-history" hidden><summary></summary><div id="scope-list"></div></details>
+      <details id="connector-help"><summary>浏览器连接步骤</summary>
+        <p>保持已安装扩展的 Chromium 浏览器（如 Chrome、Edge）和本地工作台服务运行。扩展每分钟读取账号课程目录，分批检查各班的章节作业。平时可以关掉课程标签页；提示登录过期时，去<a href="https://www.yuketang.cn/web">雨课堂</a>登录一次。</p>
+        <p>首次安装时，在浏览器的扩展管理页面打开开发者模式，点击「加载已解压的插件程序」，选择项目目录中的「雨课堂浏览器连接」文件夹。</p>
+        <p>要连接学习通，请在同一浏览器登录<a href="https://mooc1-api.chaoxing.com/work/stu-work">学习通作业列表</a>。点击「课藏」扩展并选择「允许读取学习通课程与作业」。之后可以关闭课程标签页。</p>
+        <p class="muted">学习通按班级轮流检查。查看目录里的班级检查时间与「待重试」提示，即可判断数据是否已经读全。</p>
+      </details>
+    </section>
+    <section id="assignment" hidden tabindex="-1">
+      <button id="back-course">← 返回本课程</button>
+      <div class="card-head"><div><p id="course" class="kicker"></p><h2 id="title"></h2></div><b class="pill" id="status"></b></div>
+      <div class="facts"><div><small id="deadline-label">截止时间</small><strong id="due"></strong></div><div><small>提交状态来源</small><strong id="source"></strong></div><div><small>页面进度</small><strong id="progress"></strong></div></div>
+      <p id="verified" class="muted"></p>
+      <div class="facts"><div><small>时间状态</small><strong id="time-state"></strong></div><div><small>完成状态</small><strong id="completion"></strong></div></div>
+      <p id="platform-note" class="muted"></p><a id="platform-link" target="_blank" rel="noopener noreferrer" hidden>查看平台原作业</a>
+      <p id="reminder-note" class="muted"></p><button type="button" id="reminder-toggle">无需提醒</button>
+      <div id="local-report"><h3>我的报告</h3><p id="uploaded"></p><div id="report"></div>
+      <form id="bind"><label for="report-path">关联本机 Word 原件</label><div class="input-row"><input id="report-path" required placeholder="粘贴 .doc 或 .docx 文件的完整路径"><button>保存关联</button></div></form>
+      </div>
+      <h3>老师附件与关联资料</h3><div id="expected"></div><div id="materials"></div>
+      <button type="button" id="package">下载本次作业资料包</button>
+      <small id="package-note"></small>
+    </section>
+    <section id="inbox" hidden><div class="card-head"><div><p class="kicker">本地下载</p><h2>下载收件箱 <span id="total"></span></h2></div><input type="search" id="find" aria-label="查找下载文件" placeholder="查找文件名或子目录"></div>
+      <p id="scan" class="muted"></p><p id="warnings" role="status"></p><div id="files"></div></section>
+  </main>
+</body></html>

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>课藏 · 本地课程资料</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<aside class="sidebar"><a class="brand" href="/">课藏<span>COURSE LIBRARY</span></a><a href="/" class="board-back">← 作业工作台</a><div class="semester">课程内容 <span>按学期浏览</span></div><nav id="semesters" aria-label="学期筛选"></nav><div class="side-note"><span class="dot"></span> 本机运行 · 只读浏览<p>资料保留原位置<br>所有课程文件均不会被修改</p></div></aside>
+<main><header><div><div class="eyebrow">让每一份资料，都有迹可循</div><h1>我的课程资料</h1><p class="subtitle">浏览、搜索，找到你需要的那一份。</p></div><button id="refresh" class="refresh">↻ 重新扫描</button></header>
+<section class="stats" aria-label="资料概览"><div><span>已识别学期</span><strong id="semester-count">—</strong></div><div><span>学期课程数</span><strong id="course-count">—</strong></div><div><span>已收录文件</span><strong id="file-count">—</strong></div><div class="scan-stat"><span>最近扫描</span><strong id="scan-time">—</strong></div></section>
+<section class="workspace"><div class="toolbar"><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="搜索文件名，例如：实验报告" aria-label="搜索文件名"></label><select id="course-filter" aria-label="筛选课程"><option value="">所有课程</option></select><select id="type" aria-label="筛选文件类型"><option value="">所有文件类型</option></select><select id="sort" aria-label="排序"><option value="name">名称排序</option><option value="modified">最近修改</option><option value="size">文件大小</option></select></div><p class="scope-note">搜索覆盖所选学期、课程的全部子目录；清空关键词和类型筛选后恢复逐层浏览。</p>
+<div class="list-heading"><nav id="breadcrumb" aria-label="目录路径"></nav><span id="result-count" aria-live="polite"></span></div>
+<div id="message" role="status" aria-live="polite">正在读取本地文件目录…</div>
+<div class="table-wrap"><table><thead><tr><th>名称 / 原始路径</th><th>学期 / 课程</th><th>文件类型</th><th>大小</th><th>修改时间</th></tr></thead><tbody id="rows"></tbody></table></div>
+<div id="empty" hidden>这里没有匹配的文件。试试其他关键词，或清除筛选。</div></section>
+<footer><div id="root-path"></div><details><summary id="scan-summary">扫描规则与提示</summary><p>按“学期 → 课程”目录识别归属，其他根目录归入“其他资料”。node_modules、.git、__pycache__ 保留目录入口并跳过内部文件；跳过 Office 临时文件（~$ 开头）和链接。不展开压缩包，不读取文档正文，不执行项目代码。</p><div id="warnings"></div></details></footer>
+<dialog id="detail"><div class="dialog-top"><h2>文件信息</h2><button id="close-detail" aria-label="关闭文件信息">✕</button></div><dl id="detail-fields"></dl><p class="detail-note">此版本提供文件信息查看；内容预览和整理将在后续版本加入。</p></dialog>
+</main></body></html>
