@@ -25,3 +25,26 @@
 发布操作只选独立源码目录。`.gitignore` 会忽略常见的本地数据库、日志和 data 文件夹，提交前仍需检查 Changes。每位使用者的账号登录保留在自己的浏览器内。
 
 [GitHub 官方文档：将本地仓库添加到 GitHub Desktop](https://docs.github.com/en/desktop/adding-and-cloning-repositories/adding-a-repository-from-your-local-computer-to-github-desktop)
+
+## 更新已有 GitHub 仓库
+
+更新时使用本公开目录作为源码来源，保留 `web/` 和「雨课堂浏览器连接」两个子目录的结构。不要将私人运行目录整包覆盖到仓库。
+
+1. 在已有仓库的本地副本中先检查是否有未提交改动，并获取远端最新版本；有冲突时先处理再复制。
+2. 运行下面的发布检查，将输出清单中的全部文件复制到已有仓库根目录，再检查差异。清单中已有的文件覆盖更新，新增的文件一起加入提交。
+3. `.gitignore` 只会忽略尚未跟踪的文件。若旧仓库已跟踪数据库、日志、课程资料、验证样例、个人截图或临时检查目录，应从本次提交中移除；不要删除 `data/` 中自己正在使用的资料。是否保留远端专用的许可证、工作流等文件，应单独判断。
+4. 确认只包含准备分享的源码后，由仓库拥有者提交并推送。建议摘要：`完善公开版空白启动、提醒与发布校验`。
+
+```powershell
+python -B -m unittest -v test_public_release
+python -B prepare_release.py --check
+python -B prepare_release.py
+```
+
+第一条命令使用临时副本验收空数据接口、本地文件扫描、模拟课程同步和作业详情；不会连接真实课程平台或日常工作台。第二条命令检查并列出 29 个待上传文件。第三条命令在 `release/` 生成源码 ZIP、SHA256 校验值和文件清单。导出只包含固定源码白名单，不包含 `.git/`、`data/`、数据库、日志、截图或临时依赖。
+
+源码 ZIP 适合分发下载或作为 Release 附件。通过网页更新仓库源码时，应先解压，再按文件清单上传源码，保留子目录；单独上传 ZIP 不会替换仓库里的源码文件。新增源文件后，需同时维护 `prepare_release.py` 的 `FILES` 白名单。
+
+## 可选的本地目录设置
+
+默认课程目录为 `data/courses/`，下载收件箱为 `data/inbox/`，首次启动自动建立空目录。可以在启动前设置环境变量 `KECANG_COURSES_ROOT` 和 `KECANG_INBOX` 指向自己的目录；相对路径以程序目录为准。公开源码保留空白默认配置，不填写个人路径，也不导出这些目录中的文件。

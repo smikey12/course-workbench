@@ -63,7 +63,7 @@ def summary(info, since):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="使用联想浏览器已登录账号，同步课藏的课程和班级作业")
+    parser = argparse.ArgumentParser(description="使用已安装课藏扩展的浏览器已登录账号，同步课藏的课程和班级作业")
     parser.add_argument("--platform", choices=["all","rain","cx"], default="all", help="all 两个平台；rain 雨课堂；cx 学习通")
     parser.add_argument("--status", action="store_true", help="只查看最近的读取记录")
     parser.add_argument("--list", action="store_true", help="列出课程名、班级编号和最近作业检查结果")
@@ -93,7 +93,7 @@ def main():
             list_courses(state, names)
         return 0
     since = datetime.fromisoformat(api("request", {"platform":args.platform})["since"])
-    print("已安排检查同步范围内的班级。请保持联想浏览器运行。", flush=True)
+    print("已安排检查同步范围内的班级。请保持已安装课藏扩展的浏览器运行。", flush=True)
     started = time.monotonic()
     last = {}
     problems = set()
@@ -120,7 +120,7 @@ def main():
             access = info.get("access") or {}
             denied = access.get("allowed") is False and fresh(access.get("at"), since)
             if denied or elapsed >= args.timeout or (not indexed and elapsed >= 100):
-                help_text = "确认联想浏览器已运行、「课藏」扩展已启用，并检查平台登录。"
+                help_text = "确认已安装课藏扩展的浏览器已运行、「课藏」扩展已启用，并检查平台登录。"
                 if name == "cx":
                     help_text += " 在扩展中点击「允许读取学习通课程与作业」。"
                 print(f"{NAMES[name]}：" + ("扩展尚未获准读取。" if denied else "等待本轮数据超时。") + help_text)

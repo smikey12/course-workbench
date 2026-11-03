@@ -233,8 +233,8 @@ function courseRow(course, summary, term) {
   if (summary.hint) pending.append(node("small", summary.hint));
   const arrow = node("span","›","course-arrow");
   arrow.setAttribute("aria-hidden","true");
-  link.append(icon,name,pending,arrow);
-  link.setAttribute("aria-label", [course.name,course.platform,course.section,"待完成 "+summary.count,summary.hint].filter(Boolean).join("，"));
+  link.append(icon,name,pending,node("b", summary.completed, "course-completed"),arrow);
+  link.setAttribute("aria-label", [course.name,course.platform,course.section,"待完成 "+summary.count,summary.hint,"已完成 "+summary.completed].filter(Boolean).join("，"));
   return link;
 }
 
@@ -358,6 +358,8 @@ function renderTaskList() {
         .some(item => item.title.toLowerCase().includes(query));
       if ((status || !courseMatch) && !feedMatch && !own.some(task => matches(task, courseMatch))) continue;
       const summary = pendingSummary(course, own, now);
+      const completed = own.filter(t => taskKind(t) === "completed").length;
+      summary.completed = completed || course.checked ? completed + " 项" : "待同步";
       const total = own.filter(t => taskKind(t) === "unfinished").length;
       rows.push({course, summary, term:courseTerm(course), total: total || (summary.count === "0 项" ? 0 : -1)});
     }
@@ -385,7 +387,7 @@ function renderTaskList() {
     }
     const directory = node("div", "", "directory-rows");
     const labels = node("div", "", "directory-columns");
-    labels.append(node("span","课程名称"),node("span","待完成"));
+    labels.append(node("span","课程名称"),node("span","待完成"),node("span","已完成"));
     directory.append(labels);
     rows.sort((a,b) => compareCourses(a,b,term,byId("course-sort").value));
     directory.append(...rows.slice(0,visible).map(({course,summary,term}) => courseRow(course,summary,term)));

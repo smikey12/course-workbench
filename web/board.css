@@ -173,15 +173,17 @@ section[aria-label="平台课程目录"] > :is(.card-head,.directory-controls,#d
 .directory-sort[hidden] { display:none; }
 #toggle-directory { display:block; margin:12px auto 0; color:#494895; border:0; font-size:14px; }
 #toggle-directory[hidden] { display:none; }
-.directory-rows { --indent: 12px; --arrow: 12px; --gap: 14px; }
+.directory-rows { --indent: 12px; --arrow: 12px; --gap: 14px; --tracks: 21px minmax(0,1fr) 12rem 4.5rem var(--arrow); }
 .directory-columns {
-  display: flex; justify-content: space-between;
-  padding: 7px calc(var(--indent) + var(--arrow) + var(--gap)) 7px var(--indent);
+  display: grid; grid-template-columns: var(--tracks); gap: var(--gap); text-align: right;
+  padding: 7px var(--indent);
   border-block: 1px solid #e1e4ef; background: #f7f8fc; color: #56607a;
   font-size: 12px; font-weight: 600;
 }
+.directory-columns > :first-child { grid-column: span 2; text-align: left; }
+.course-completed { text-align: right; color: #515785; font-size: 14px; font-variant-numeric: tabular-nums; }
 .course-row {
-  display: grid; grid-template-columns: 21px minmax(0,1fr) auto var(--arrow); gap: var(--gap);
+  display: grid; grid-template-columns: var(--tracks); gap: var(--gap);
   align-items: center; min-height: 54px; padding: 8px var(--indent);
   border-bottom: 1px solid #e9ebf3; text-decoration: none; color: #2d3657;
 }
@@ -204,8 +206,7 @@ section[aria-label="平台课程目录"] > :is(.card-head,.directory-controls,#d
 .course-row[data-priority="later"] .course-pending b { background: #fff0da; }
 .course-arrow { color: #767b98; font-size: 19px; text-align: right; }
 @media (max-width: 640px) {
-  .directory-rows { --indent: 5px; --gap: 8px; --arrow: 9px; }
-  .course-row { grid-template-columns: 17px minmax(0,1fr) auto var(--arrow); }
+  .directory-rows { --indent: 5px; --gap: 8px; --arrow: 9px; --tracks: 17px minmax(0,1fr) 5rem 3.2rem var(--arrow); }
   .folder-icon { width: 17px; }
   .course-pending { flex-direction: column; align-items: end; gap: 1px; }
 }
