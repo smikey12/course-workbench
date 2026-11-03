@@ -13,10 +13,10 @@ echo Python 3 was not found. Please install Python 3 and try again.
 pause
 exit /b 1
 :run_py
-py -3 -B server.py %*
+py -3 -B launcher.py %*
 goto finished
 :run_python
-python -B server.py %*
+python -B launcher.py %*
 goto finished
 :folder_error
 echo Cannot open the tool directory.
@@ -25,6 +25,6 @@ exit /b 1
 :finished
 set "COURSE_EXIT_CODE=%errorlevel%"
 echo.
-echo Server stopped.
+echo Launcher finished. The workbench continues in the background.
 pause
 exit /b %COURSE_EXIT_CODE%
