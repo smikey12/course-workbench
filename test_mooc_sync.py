@@ -174,6 +174,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.request import Request,urlopen
 import platform_sync, server, workbench
+platform_sync.platform_settings(['mooc'])
 root=Path.cwd()
 inbox=root/'inbox'
 inbox.mkdir()

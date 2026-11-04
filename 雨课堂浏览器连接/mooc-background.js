@@ -8,8 +8,9 @@ async function wakeMooc() {
   let createdTab=null;
   try {
     const allowed=await chrome.permissions.contains({origins:moocOrigins});
+    const config=await local({action:"check",platform:"mooc",moocAccess:allowed});
     if (!allowed) return {issue:"中国大学 MOOC 尚未单独授权"};
-    if (!(await local({action:"check"})).enabled) return {issue:"工作台已暂停接收"};
+    if (!config.enabled) return {issue:config.selected && !config.selected.includes("mooc") ? "该平台未被选择，已停止检查；已有数据保留" : "工作台已暂停接收"};
     const tabs=await chrome.tabs.query({url:"https://www.icourse163.org/*"});
     // 复用现有会话；没有官网标签页时，只临时创建扩展自己的后台页。
     // 避免复用答题/考试页，不接触用户正在进行的测验。
@@ -29,6 +30,7 @@ async function wakeMooc() {
     const results=await chrome.scripting.executeScript({target:{tabId:tab.id},world:"MAIN",func:collectMooc});
     const result=results?.[0]?.result;
     if (!result || (!Array.isArray(result.courses) && typeof result.issue!=="string")) throw new Error("MOOC 读取器没有返回可核验的结果");
+    if (!(await local({action:"check",platform:"mooc"})).enabled) return {issue:"MOOC 已取消选择或暂停，本轮不写入"};
     await local({action:"mooc",...result});
     return {ok:true,...(result.issue ? {issue:result.issue} : {})};
   } catch (error) {

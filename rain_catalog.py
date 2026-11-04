@@ -6,6 +6,7 @@ from datetime import date
 import retention
 import course_scope
 import mooc_sync
+import pta_sync
 from datetime import datetime, timedelta, timezone
 
 CHINA = timezone(timedelta(hours=8))
@@ -41,6 +42,7 @@ def open_db(path):
     conn.execute("""CREATE TABLE IF NOT EXISTS feeds (
         scope TEXT PRIMARY KEY, checked TEXT DEFAULT '', attempted TEXT, issue TEXT, items TEXT DEFAULT '[]')""")
     mooc_sync.install(conn)
+    pta_sync.install(conn)
     course_scope.install(conn)
     return conn
 

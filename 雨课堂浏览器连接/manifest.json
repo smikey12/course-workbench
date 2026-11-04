@@ -1,12 +1,41 @@
 {
   "manifest_version": 3,
-  "name": "课藏 · 雨课堂连接",
-  "version": "0.4.0",
-  "description": "读取已登录雨课堂账号的课程、作业和课堂动态；授权后可读取学习通课程与作业，同步到本机课藏。",
-  "permissions": ["alarms", "offscreen", "scripting"],
-  "optional_host_permissions": ["https://mooc1-api.chaoxing.com/*", "https://mooc1.chaoxing.com/*", "https://mooc2-ans.chaoxing.com/*", "https://www.icourse163.org/*"],
+  "name": "课藏 · 平台连接",
+  "version": "0.5.0",
+  "description": "定期读取已登录雨课堂账号的课程目录、章节作业和个人完成状态，同步到本机课藏。",
+  "permissions": [
+    "alarms",
+    "offscreen",
+    "scripting"
+  ],
+  "optional_host_permissions": [
+    "https://mooc1-api.chaoxing.com/*",
+    "https://mooc1.chaoxing.com/*",
+    "https://mooc2-ans.chaoxing.com/*",
+    "https://www.icourse163.org/*",
+    "https://www.yuketang.cn/*",
+    "https://pintia.cn/*"
+  ],
   "options_page": "cx-access.html",
-  "host_permissions": ["https://www.yuketang.cn/*", "http://127.0.0.1:8765/*"],
-  "background": {"service_worker": "background.js"},
-  "action": {"default_title": "课藏 · 课程同步", "default_popup": "cx-access.html"}
+  "host_permissions": [
+    "http://127.0.0.1:8765/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "课藏 · 课程同步",
+    "default_popup": "cx-access.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://127.0.0.1:8765/*"
+      ],
+      "js": [
+        "workbench-bridge.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

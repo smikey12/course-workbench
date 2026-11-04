@@ -9,13 +9,12 @@ import sqlite3
 import shutil
 import workbench
 import platform_sync
-from public_settings import COURSE_ROOT, INBOX, ensure_data_dirs
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
-DEFAULT_ROOT = COURSE_ROOT
+from public_settings import COURSE_ROOT as DEFAULT_ROOT, ensure_data_dirs
 WEB_ROOT = Path(__file__).parent / "web"
 IGNORED_DIRS = {"node_modules", ".git", "__pycache__"}
 SEMESTER_PATTERN = re.compile(r"^大[一二三四五六][上下]$")
@@ -108,7 +107,7 @@ def scan_catalog(root, semester_only=None):
             "scannedAt": datetime.now(timezone.utc).isoformat()}
 
 
-def make_handler(root, port, database=workbench.DATABASE, inbox=INBOX):
+def make_handler(root, port, database=workbench.DATABASE, inbox=workbench.INBOX):
     cache = {"catalog": None}
     lock = threading.Lock()
 
@@ -119,6 +118,9 @@ def make_handler(root, port, database=workbench.DATABASE, inbox=INBOX):
                 self.send_error(403)
                 return
             url = urlsplit(self.path)
+            if url.path == "/api/platform-preferences":
+                self.json_reply(platform_sync.platform_settings())
+                return
             if url.path == "/api/sync/status":
                 self.json_reply(platform_sync.collector_status())
                 return
@@ -160,7 +162,7 @@ def make_handler(root, port, database=workbench.DATABASE, inbox=INBOX):
             self.reply(json.dumps(data, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8", status)
 
         def do_POST(self):
-            if self.path not in ("/api/association", "/api/reminder", "/api/package", "/api/inbox/cleanup", "/api/sync/start", "/api/sync/stop", "/api/sync/browser", "/api/sync/request", "/api/sync/course-scope"):
+            if self.path not in ("/api/platform-preferences", "/api/association", "/api/reminder", "/api/package", "/api/inbox/cleanup", "/api/sync/start", "/api/sync/stop", "/api/sync/browser", "/api/sync/request", "/api/sync/course-scope"):
                 self.send_error(501)
                 return
             host = self.headers.get("Host")
@@ -179,6 +181,11 @@ def make_handler(root, port, database=workbench.DATABASE, inbox=INBOX):
                 data = json.loads(self.rfile.read(length))
                 if not isinstance(data, dict):
                     raise ValueError("请求格式错误")
+                if self.path == "/api/platform-preferences":
+                    if "selected" not in data or data["selected"] is None:
+                        raise ValueError("缺少 selected 列表")
+                    self.json_reply(platform_sync.platform_settings(data["selected"]))
+                    return
                 if self.path == "/api/reminder":
                     with lock:
                         workbench.update_reminder(data.get("task"),data.get("dismissed"),data.get("reason",""),database)

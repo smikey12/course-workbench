@@ -9,6 +9,7 @@ import zipfile
 import retention
 import cx_sync
 import mooc_sync
+import pta_sync
 import course_scope
 import inbox_cleanup
 import rain_catalog
@@ -53,7 +54,7 @@ def task_record(task_id):
     raise ValueError("作业不存在")
 
 
-def all_task_records(feeds=None, courses=None, cx=None, history=None, mooc=None):
+def all_task_records(feeds=None, courses=None, cx=None, history=None, mooc=None, pta=None):
     """只展示当前用户同步到本机的记录，不加载验证样例或预置课程。"""
     records = {}
     import platform_sync
@@ -65,7 +66,9 @@ def all_task_records(feeds=None, courses=None, cx=None, history=None, mooc=None)
         courses = platform_sync.courses()
     if mooc is None:
         mooc = mooc_sync.read(platform_sync.DATABASE)
-    for remote in platform_sync.saved_tasks() + platform_sync.assessment_tasks(feeds, courses) + cx["tasks"] + mooc["tasks"]:
+    if pta is None:
+        pta = pta_sync.read(platform_sync.DATABASE)
+    for remote in platform_sync.saved_tasks() + platform_sync.assessment_tasks(feeds, courses) + cx["tasks"] + mooc["tasks"] + pta["tasks"]:
         key = remote["id"]
         previous = records.get(key, ({}, {}))[0]
         task = dict(previous, **remote)
@@ -268,13 +271,14 @@ def read_board(database=DATABASE, inbox=INBOX, task_id=TASK):
     feeds, courses = platform_sync.feeds(), platform_sync.courses()
     cx = cx_sync.read(platform_sync.DATABASE)
     mooc = mooc_sync.read(platform_sync.DATABASE)
+    pta = pta_sync.read(platform_sync.DATABASE)
     with closing(rain_catalog.open_db(platform_sync.DATABASE)) as conn:
         conn.row_factory = sqlite3.Row
         history = course_scope.history(conn)
         starts = dict(conn.execute("SELECT id,started FROM course_dates"))
-    for course in courses + cx["courses"] + mooc["courses"]:
+    for course in courses + cx["courses"] + mooc["courses"] + pta["courses"]:
         course["started"] = starts.get(course["id"])
-    records = apply_reminder_preferences(all_task_records(feeds, courses, cx, history, mooc),database)
+    records = apply_reminder_preferences(all_task_records(feeds, courses, cx, history, mooc, pta),database)
     selected = next(((task, source) for task, source in records if task["id"] == task_id), None)
     task, snapshot = selected or ({}, {})
     assignments = []
@@ -293,8 +297,9 @@ def read_board(database=DATABASE, inbox=INBOX, task_id=TASK):
         links = [dict(role=r, path=p, basis=b, available=Path(p).is_file())
                  for r, p, b in conn.execute("SELECT role,path,basis FROM links WHERE task=? ORDER BY path", (task_id,))] if task else []
     return dict(task=task, course=snapshot.get("course",""), verified=task.get("observedAt", snapshot.get("verificationDate","")),
-                sync=platform_sync.status(), courses=courses + mooc["courses"], feeds=feeds, cxCourses=cx["courses"], courseScope=history,
+                sync=platform_sync.status(), courses=courses + mooc["courses"] + pta["courses"], feeds=feeds, cxCourses=cx["courses"], courseScope=history,
                 cxSync={"checked":cx["checked"],"issue":cx["issue"]},
+                ptaSync={"checked":pta["checked"],"issue":pta["issue"]},
                 moocSync={"checked":mooc["checked"],"issue":mooc["issue"]},
                 assignments=assignments, links=links, inbox=str(inbox), files=items, warnings=warnings,
                 cleanupFolder=str(inbox / inbox_cleanup.FOLDER),

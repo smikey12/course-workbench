@@ -1,5 +1,7 @@
 "use strict";
-importScripts("mooc-reader.js","mooc-background.js");
+importScripts("mooc-reader.js","mooc-background.js","connector-global.js");
+try { importScripts("pta-reader.js"); } catch { /* 读取器未安装时保持其他平台可用。 */ }
+importScripts("pta-background.js");
 
 const remote = "https://www.yuketang.cn";
 const receiver = "http://127.0.0.1:8765/api/sync/browser";
@@ -15,6 +17,7 @@ async function local(payload) {
 }
 
 async function readApi(path, params, step) {
+  if (!(await platformGate("rain"))) throw new Error("雨课堂未选择、未授权或已暂停");
   const url = new URL(path, remote);
   url.search = new URLSearchParams(params);
   const response = await fetch(url, {
@@ -221,7 +224,7 @@ async function synchronize() {
   let badge = "!";
   let title = "工作台未启动，稍后自动重试";
   try {
-    const config = await local({action: "check"});
+    const config = {enabled:await platformGate("rain")};
     if (!config.enabled) {
       badge = "";
       title = "工作台已暂停接收";
@@ -230,11 +233,11 @@ async function synchronize() {
         const index = await local(await readIndex());
         await syncFeed("exams", upcomingExams);
         for (const id of index.feedCourses || []) {
-          if (!(await local({action:"check"})).enabled) break;
+          if (!(await local({action:"check",platform:"rain"})).enabled) break;
           await syncFeed(id, () => classroomFeed(id));
         }
         for (const id of index.next) {
-          if (!(await local({action: "check"})).enabled) break;
+          if (!(await local({action: "check",platform:"rain"})).enabled) break;
           try {
             await local(await readCourse(id,index.oldLeaves?.[id]));
           } catch (error) {
@@ -246,7 +249,7 @@ async function synchronize() {
         title = "账号目录共 " + index.count + " 门课程";
       } catch (error) {
         const login = error.message === "login";
-        title = login ? "雨课堂登录已过期，请在安装此扩展的浏览器中登录一次" : "暂未更新 · " + error.message;
+        title = login ? "雨课堂登录已过期，请在联想浏览器登录一次" : "暂未更新 · " + error.message;
         await local({action: "issue", login, message: title});
       }
     }
@@ -269,7 +272,7 @@ let creatingCX;
 async function wakeCX() {
   const hosts=["mooc1-api","mooc1","mooc2-ans"].map(s=>"https://"+s+".chaoxing.com/*");
   const allowed = await chrome.permissions.contains({origins:hosts});
-  if (!(await local({action:"check",cxAccess:allowed}).catch(()=>({enabled:false}))).enabled || !allowed) return;
+  if (!(await local({action:"check",platform:"cx",cxAccess:allowed}).catch(()=>({enabled:false}))).enabled || !allowed) return;
   try {
     if (!await chrome.offscreen.hasDocument()) {
       creatingCX ||= chrome.offscreen.createDocument({url:"cx-reader.html",reasons:["DOM_PARSER"],
@@ -281,10 +284,16 @@ async function wakeCX() {
     await local({action:"chaoxing",issue:"后台读取器未能启动，请重新加载连接扩展"}).catch(()=>{});
   }
 }
-chrome.runtime.onMessage.addListener(msg=>{if(msg.type==="cx-wake") wakeCX();});
+
 chrome.runtime.onInstalled.addListener(startTimer);
 chrome.runtime.onStartup.addListener(startTimer);
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === "course-sync") {synchronize(); wakeCX();}
 });
 chrome.action.onClicked.addListener(synchronize);
+
+chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
+ if(msg.type!=="rain-wake" && msg.type!=="cx-wake") return;
+ if(sender.id!==chrome.runtime.id) return;
+ (msg.type==="rain-wake" ? synchronize() : wakeCX()).then(()=>reply({ok:true}),e=>reply({issue:String(e.message).slice(0,280)}));return true;
+});

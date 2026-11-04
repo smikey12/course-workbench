@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 
 BASE = Path(__file__).resolve().parent
 URL = "http://127.0.0.1:8765"
-NAMES = {"rain": "雨课堂", "cx": "学习通"}
+NAMES = {"rain": "雨课堂", "cx": "学习通", "mooc":"中国大学 MOOC", "pta":"PTA（拼题 A）"}
 
 
 def api(path, body=None):
@@ -64,7 +64,7 @@ def summary(info, since):
 
 def main():
     parser = argparse.ArgumentParser(description="使用已安装课藏扩展的浏览器已登录账号，同步课藏的课程和班级作业")
-    parser.add_argument("--platform", choices=["all","rain","cx"], default="all", help="all 两个平台；rain 雨课堂；cx 学习通")
+    parser.add_argument("--platform", choices=["all","rain","cx","mooc","pta"], default="all", help="all 已选平台；rain 雨课堂；cx 学习通；mooc 慕课；pta 拼题 A")
     parser.add_argument("--status", action="store_true", help="只查看最近的读取记录")
     parser.add_argument("--list", action="store_true", help="列出课程名、班级编号和最近作业检查结果")
     parser.add_argument("--timeout", type=int, default=360, help="最多等待秒数，默认 360")
@@ -72,7 +72,7 @@ def main():
     if args.timeout <= 0:
         parser.error("--timeout 必须大于零")
     state = ensure_receiver()
-    names = list(NAMES) if args.platform == "all" else [args.platform]
+    names = [key for key in NAMES if key in state.get("platformPreferences",{}).get("selected",["rain","cx","mooc"])] if args.platform == "all" else [args.platform]
     for name in names:
         info = state[name]
         stamp = info["directory"]

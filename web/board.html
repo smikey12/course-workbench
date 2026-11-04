@@ -9,6 +9,16 @@
   <main>
     <div class="intro"><div><p class="kicker">我的课程 / 作业</p><h1>作业工作台</h1></div><button id="refresh">↻ 刷新本地文件</button></div>
     <p id="notice" role="status">正在读取作业与本地文件…</p>
+    <section aria-label="平台选择"><details id="platform-settings" open><summary>连接平台设置</summary>
+      <p>选择需要连接的平台；以后可随时在这里更改。取消选择会停止展示该平台的课程与提醒，已保存记录仍由本机服务保留。</p>
+      <form id="platform-preferences"><div class="platform-choices">
+        <label><input type="checkbox" name="platform" value="cx"> 学习通</label>
+        <label><input type="checkbox" name="platform" value="rain"> 雨课堂</label>
+        <label><input type="checkbox" name="platform" value="mooc"> 中国大学 MOOC</label>
+        <label><input type="checkbox" name="platform" value="pta"> PTA</label>
+      </div><button type="submit">保存平台选择</button> <button type="button" id="retry-platforms">重新检查连接</button></form>
+      <p id="preferences-message" role="status">正在读取平台设置…</p>
+      </details><div id="platform-connections" aria-live="polite"></div></section>
     <section aria-label="下载预清理">
       <details id="cleanup-panel"><summary>下载收件箱 · 预清理 <span id="cleanup-count"></span></summary>
         <p>超过六个自然月未使用、且未关联作业的下载文件可移入预清理。保留原子目录，可恢复原位。查看后可在资源管理器中自行删除。</p>
@@ -23,7 +33,7 @@
       <button id="back-courses" hidden>← 全部课程</button>
       <div class="card-head"><h2 id="directory-title">平台课程目录</h2><input type="search" id="task-search" aria-label="搜索课程或作业" placeholder="搜索课程或作业"></div>
       <p class="muted" id="directory-info"></p>
-      <div class="directory-controls"><div class="input-row"><label for="platform-filter">平台</label><select id="platform-filter"><option value="">全部平台</option><option>雨课堂</option><option>学习通</option><option>中国大学 MOOC</option></select>
+      <div class="directory-controls"><div class="input-row"><label for="platform-filter">平台</label><select id="platform-filter"><option value="">全部平台</option><option>雨课堂</option><option>学习通</option><option>中国大学 MOOC</option><option>PTA（拼题 A）</option></select>
       <label for="list-status">作业状态</label><select id="list-status"><option value="">全部状态</option><option value="unfinished">未完成</option><option value="unknown">待核实</option><option value="completed">已完成</option><option value="missed">过期未做</option><option value="dismissed">无需提醒</option></select></div>
       <div id="directory-sort" class="directory-sort">
         <label>优先学期 <select id="preferred-term"><option value="">本学期</option></select></label>
@@ -37,12 +47,9 @@
       <p id="cx-status" class="muted" role="status"></p>
       <p id="mooc-status" class="muted" role="status"></p>
       <details id="course-history" hidden><summary></summary><div id="scope-list"></div></details>
-      <details id="connector-help"><summary>浏览器连接步骤</summary>
-        <p>保持已安装扩展的 Chromium 浏览器（如 Chrome、Edge）和本地工作台服务运行。扩展每分钟读取账号课程目录，分批检查各班的章节作业。平时可以关掉课程标签页；提示登录过期时，去<a href="https://www.yuketang.cn/web">雨课堂</a>登录一次。</p>
-        <p>首次安装时，在浏览器的扩展管理页面打开开发者模式，点击「加载已解压的插件程序」，选择项目目录中的「雨课堂浏览器连接」文件夹。</p>
-        <p>要连接学习通，请在同一浏览器登录<a href="https://mooc1-api.chaoxing.com/work/stu-work">学习通作业列表</a>。点击「课藏」扩展并选择「允许读取学习通课程与作业」。之后可以关闭课程标签页。</p>
-        <p>中国大学 MOOC 的连接状态显示在上方。请在已安装课藏扩展的浏览器登录该平台；课程与作业以实际读取结果为准。</p>
-        <p class="muted">学习通按班级轮流检查。查看目录里的班级检查时间与「待重试」提示，即可判断数据是否已经读全。</p>
+      <details id="connector-help"><summary>所选平台的连接步骤</summary>
+        <p>在使用的 Chromium 浏览器中安装项目内「雨课堂浏览器连接」扩展：进入扩展管理页，打开开发者模式，加载该文件夹。保持浏览器和本机服务运行。</p>
+        <div id="selected-platform-help"></div>
       </details>
     </section>
     <section id="assignment" hidden tabindex="-1">
@@ -60,7 +67,7 @@
       <button type="button" id="package">下载本次作业资料包</button>
       <small id="package-note"></small>
     </section>
-    <section id="inbox" hidden><div class="card-head"><div><p class="kicker">本地下载</p><h2>下载收件箱 <span id="total"></span></h2></div><input type="search" id="find" aria-label="查找下载文件" placeholder="查找文件名或子目录"></div>
+    <section id="inbox" hidden><div class="card-head"><div><p class="kicker">学习通下载</p><h2>下载收件箱 <span id="total"></span></h2></div><input type="search" id="find" aria-label="查找下载文件" placeholder="查找文件名或子目录"></div>
       <p id="scan" class="muted"></p><p id="warnings" role="status"></p><div id="files"></div></section>
   </main>
 </body></html>

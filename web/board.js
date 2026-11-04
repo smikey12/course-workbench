@@ -13,6 +13,101 @@ const courseNames = new Intl.Collator("zh-CN", {numeric:true});
 let readVersion = 0;
 let syncPending = false;
 let syncVersion = 0;
+let platformPreferences = null;
+let connectionStatus = null;
+let preferencesEditing = false;
+const connectionRequests = new Map();
+const connectionFeedback = new Map();
+const PLATFORMS = {cx:{name:"学习通",url:"https://mooc1.chaoxing.com/"},rain:{name:"雨课堂",url:"https://www.yuketang.cn/web"},mooc:{name:"中国大学 MOOC",url:"https://www.icourse163.org/"},pta:{name:"PTA（拼题 A）",url:"https://pintia.cn/"}};
+function platformEnabled(name) {
+  if (!platformPreferences) return true;
+  const key = name === "PTA" ? "pta" : Object.keys(PLATFORMS).find(k => PLATFORMS[k].name === name);
+  return platformPreferences.selected.includes(key);
+}
+function connectionGuidance(key, status) {
+  if (!status) return {label:"连接状态暂不可用",next:"点击重新检查连接；已有记录不代表当前已连接。"};
+  const state = status[key] || {};
+  const connection = status.connections?.[key] || {};
+  const message = connection.issue || state.issue || state.message || "";
+  const permissionFresh = connection.permissionCheckedAt && Date.now() - Date.parse(connection.permissionCheckedAt) < 600000;
+  if (permissionFresh && connection.permission === false) return {label:"需要授权",next:"打开浏览器工具栏的课藏扩展，允许读取此平台。"};
+  if (status.enabled === false) return {label:"同步已暂停",next:"点击平台同步中的恢复接收，再保持浏览器运行。"};
+  const problem = /失败|错误|待重试|未覆盖|部分|超时|error|failed|denied|timeout/i.test(message);
+  const access = state.access;
+  const freshAccess = access && access.at && Date.now() - Date.parse(access.at) < 150000;
+  if (freshAccess && access.allowed === false) return {label:"需要授权",next:"打开浏览器工具栏的课藏扩展，允许读取此平台。"};
+  if (/登录|login|未认证|401/i.test(message)) return {label:"需要登录或重新登录",next:"在安装扩展的同一浏览器登录平台，再重新检查。"};
+  if (connection.connected === true) return {label:problem ? "已连接，部分结果待核实" : "已收到同步结果",next:(problem ? message : "") || "最近成功："+new Date(connection.lastSuccess).toLocaleString("zh-CN")+"。后续按扩展周期检查。"};
+  if (state.connected === false || status.extension?.connected === false) return {label:"未检测到扩展连接",next:"确认已安装并启用课藏扩展，保持浏览器运行，再重新检查。"};
+  if (message && !state.directory) return {label:"尚未成功同步",next:message};
+  if (problem) return {label:"部分结果待核实",next:message};
+  if (state.directory) return {label:"已有同步记录",next:"最近成功："+new Date(state.directory).toLocaleString("zh-CN")+"。保持浏览器运行，等待下一轮检查。"};
+  return {label:"等待首次同步",next:"尚不能确认扩展是否已安装。请安装并启用扩展；需要授权的平台在扩展中允许读取，再登录平台并等待同步。"};
+}
+function connectionOriginSupported() {
+  return location.origin === "http://127.0.0.1:8765";
+}
+function requestPlatformConnection(key) {
+  if (!connectionOriginSupported()) {
+    connectionFeedback.set(key,"扩展仅连接 http://127.0.0.1:8765/。请从默认工作台入口连接；当前页面仍可浏览已有记录。");
+    renderPlatformSettings();
+    return;
+  }
+  if (!PLATFORMS[key] || !platformEnabled(PLATFORMS[key].name) || connectionRequests.has(key)) return;
+  connectionFeedback.set(key,"正在请求扩展打开连接页…");
+  const timer=setTimeout(()=>{
+    connectionRequests.delete(key);
+    connectionFeedback.set(key,"未收到扩展响应。请安装或重新加载课藏扩展，允许它访问本机工作台，刷新本页后重试。");
+    renderPlatformSettings();
+  },8000);
+  connectionRequests.set(key,timer);
+  window.postMessage({type:"kecang-connect",platform:key},location.origin);
+  renderPlatformSettings();
+}
+function receiveConnectionResult(event) {
+  const result=event.data;
+  if (event.source !== window || event.origin !== location.origin || !result || result.type !== "kecang-connect-result"
+      || !PLATFORMS[result.platform] || !connectionRequests.has(result.platform) || typeof result.ok !== "boolean") return;
+  clearTimeout(connectionRequests.get(result.platform));
+  connectionRequests.delete(result.platform);
+  connectionFeedback.set(result.platform,result.ok ? "已打开扩展连接页，请在该页确认授权。授权与登录后等待实际同步结果。" : "扩展未能打开连接页："+(result.issue || "请重新加载扩展后重试。"));
+  renderPlatformSettings();
+}
+function renderPlatformSettings() {
+  const settings = byId("platform-settings");
+  if (platformPreferences) {
+    if (!preferencesEditing) for (const input of document.querySelectorAll('#platform-preferences input[name="platform"]')) input.checked = platformPreferences.selected.includes(input.value);
+    if (!settings.dataset.initialized) {settings.open = !platformPreferences.configured; settings.dataset.initialized = "1";}
+  }
+  const selected = platformPreferences?.selected || [];
+  byId("preferences-message").textContent = !platformPreferences ? "暂时无法读取平台设置，请重新检查；现有课程仍可浏览。" : !platformPreferences.configured ? (selected.length ? "已沿用原有平台，请确认勾选并保存；现有课程可继续浏览。" : "首次使用，请选择需要连接的平台并保存。") : selected.length ? "已选择 "+selected.map(k=>PLATFORMS[k]?.name || k).join("、")+"，可随时修改。" : "暂未选择平台。需要连接时可在此勾选并保存。";
+  const rows = [];
+  const help = [];
+  for (const key of selected) {
+    if (!PLATFORMS[key]) continue;
+    const platform = PLATFORMS[key], guidance = connectionGuidance(key, connectionStatus);
+    const row = node("div","","platform-connection");
+    row.append(node("b",platform.name+" · "+guidance.label),node("p",guidance.next));
+    const login = node("a","打开平台登录");login.href=platform.url;login.target="_blank";login.rel="noopener noreferrer";row.append(login);
+    const connect=node("button","打开扩展连接页");connect.type="button";
+    connect.disabled=connectionRequests.has(key) || !connectionOriginSupported();connect.onclick=()=>requestPlatformConnection(key);
+    if (!connectionOriginSupported()) {
+      const explanation=node("p","扩展仅连接 127.0.0.1:8765；当前地址可继续浏览已有记录。连接与授权请使用默认入口。","muted");
+      const defaultLink=node("a","打开默认工作台连接扩展");defaultLink.href="http://127.0.0.1:8765/";defaultLink.target="_blank";defaultLink.rel="noopener noreferrer";
+      row.append(explanation,defaultLink);
+    }
+    const feedback=node("p",connectionFeedback.get(key) || (connectionOriginSupported() ? "连接页需要你点击授权；勾选平台不会自动授权。" : "当前地址不支持扩展连接，请使用上方默认入口。"),"muted");
+    feedback.setAttribute("role","status");row.append(connect,feedback);
+    rows.push(row);
+    help.push(node("p",platform.name+"：在同一浏览器登录。"+(key === "rain" ? "确认扩展已启用。" : "打开课藏扩展，允许读取此平台。")+"等待实际同步结果，不会自动完成或提交作业。"));
+  }
+  byId("platform-connections").replaceChildren(...rows);
+  byId("selected-platform-help").replaceChildren(...help);
+  byId("connector-help").hidden = selected.length === 0;
+  for (const option of byId("platform-filter").options) {option.hidden = !!option.value && !platformEnabled(option.value);option.disabled = option.hidden;}
+  if (!platformEnabled(byId("platform-filter").value) && byId("platform-filter").value) byId("platform-filter").value="";
+}
+
 
 function taskKind(task) {
   if (task.reminderDismissed) return "dismissed";
@@ -104,7 +199,7 @@ function courseDirectory() {
     if (!courses.has(task.courseId)) courses.set(task.courseId, {id: task.courseId, name: task.course,
       platform: task.platform, listed: true, note: task.platform === "学习通" ? "本地核实记录" : "等待账号目录"});
   }
-  return [...courses.values()].filter(course => course.listed);
+  return [...courses.values()].filter(course => course.listed && platformEnabled(course.platform));
 }
 
 function feedSummary(feed, count) {
@@ -264,12 +359,11 @@ function renderTaskList() {
   const status = byId("list-status").value;
   const matches = (task, courseMatch) => (!status || status === taskKind(task))
     && (courseMatch || task.title.toLowerCase().includes(query));
-  const tasks = board.assignments;
+  const tasks = board.assignments.filter(t => platformEnabled(t.platform));
   const list = byId("task-list");
   const openChapters = new Set([...list.querySelectorAll("details[open]")].map(item => item.dataset.key));
   list.replaceChildren();
   byId("directory-title").textContent = current ? current.name : "平台课程目录";
-  if (selectedCourse && !current) byId("notice").textContent = "这门课程尚未同步或已不在当前目录中，可返回全部课程。";
   byId("back-courses").hidden = !selectedCourse;
   byId("platform-filter").disabled = !!current;
   byId("sync-panel").hidden = !!current;
@@ -282,7 +376,7 @@ function renderTaskList() {
   const urgent = tasks.filter(task => taskKind(task) === "unfinished"
     && courses.some(c => c.id === task.courseId) && (!platform || task.platform === platform)
     && matches(task, task.course.toLowerCase().includes(query)));
-  byId("alerts").hidden = !!selectedCourse || !courses.length;
+  byId("alerts").hidden = !!selectedCourse || !!platformPreferences && (platformPreferences.selected.length === 0);
   byId("alerts").classList.toggle("quiet", urgent.length === 0);
   byId("alerts").dataset.priority = pendingSummary({checked:true}, urgent, Date.now()).tone;
   byId("alert-note").textContent = (urgent.length ? "" : "当前范围内的已收录作业，没有符合筛选条件的未完成项。") +
@@ -335,7 +429,7 @@ function renderTaskList() {
       }
       list.append(history);
     }
-    if (!list.childElementCount) list.append(node("p", status || query ? "没有匹配的作业。" : current.note || (current.checked ? "上次检查时没有收录作业。" : "课程目录已读取，正在等待首次作业检查。")));
+    if (!list.childElementCount) list.append(node("p", status || query ? "没有匹配的作业。" : current.note));
     list.append(...courseFeeds(current, query, status, openChapters));
     if (current.outline?.length && !status && !query) {
       list.append(node("h3", "课程章节"));
@@ -379,25 +473,7 @@ function renderTaskList() {
     const visible = directoryExpanded ? rows.length : Math.min(PREVIEW_COURSES,rows.length);
     byId("directory-info").textContent = "有待办优先 · "+term+" 优先 · 显示 "+visible+" / "+rows.length+" 门" +
       (rows.length !== courses.length ? "（全部 "+courses.length+" 门）" : "");
-    if (!rows.length) {
-      if (courses.length) list.append(node("p", "没有匹配的课程。试试清除搜索或筛选。"));
-      else {
-        byId("directory-info").textContent = "尚未同步平台课程";
-        const empty = node("div", "", "empty-state");
-        empty.append(node("h3", "从连接课程平台开始"),
-          node("p", "安装浏览器扩展并登录课程平台后，课程会自动出现在这里。点开课程即可查看作业与详情。"));
-        const help = node("button", "查看连接步骤");
-        help.type = "button";
-        help.onclick = () => {
-          byId("connector-help").open = true;
-          byId("connector-help").querySelector("summary").focus();
-          byId("connector-help").scrollIntoView({block:"nearest"});
-        };
-        empty.append(help);
-        list.append(empty);
-      }
-      return;
-    }
+    if (!rows.length) { list.append(node("p", platformPreferences && (!platformPreferences.selected.length) ? "请在连接平台设置中选择需要的平台并保存。" : "没有匹配的课程；尚未同步时，请按上方连接提示操作。")); return; }
     const directory = node("div", "", "directory-rows");
     const labels = node("div", "", "directory-columns");
     labels.append(node("span","课程名称"),node("span","待完成"),node("span","已完成"));
@@ -507,7 +583,7 @@ function renderInbox() {
 function renderCleanup() {
   const archived = board.files.filter(f => f.precleaned);
   const candidates = board.files.filter(f => f.cleanupCandidate);
-  byId("cleanup-folder").textContent = board.cleanupFolder || "尚未配置下载收件箱";
+  byId("cleanup-folder").textContent = board.cleanupFolder || ((board.inbox || "data/inbox") + "/预清理");
   byId("cleanup-count").textContent = "（待移入 " + candidates.length + "，已移入 " + archived.length + "）";
   byId("cleanup-move").disabled = !candidates.length;
   const list = byId("cleanup-files");
@@ -526,9 +602,15 @@ function renderCleanup() {
 }
 function render() {
   renderCleanup();
-  const task = board.task || {};
+  const task = board.task;
   byId("assignment").hidden = byId("inbox").hidden = !(detailOpen && task.id === selectedTask);
-  if (!detailOpen || !task.id || task.id !== selectedTask) {
+  if (task.id && !platformEnabled(task.platform)) {
+    byId("assignment").hidden = byId("inbox").hidden = true;
+    if (detailOpen) byId("notice").textContent = "该平台未被选择，可在连接平台设置中启用。";
+    renderTaskList();
+    return;
+  }
+  if (!task.id) {
     if (detailOpen) byId("notice").textContent = "这项作业已清理或不在当前清单中。";
     renderTaskList();
     return;
@@ -538,7 +620,6 @@ function render() {
   byId("status").textContent = task.displayStatus || [task.deadlineState, task.platformStatus].filter(Boolean).join(" · ");
   const completed = task.completionState === "已完成";
   const unfinished = task.completionState === "未完成";
-  const overdue = unfinished && task.deadlineState === "已截止";
   const tone = taskTone({...task, deadline:task.deadlineDisplayed, verified:board.verified},
     completed ? "completed" : unfinished ? "unfinished" : "unknown");
   const icon = completed ? "✓ " : unfinished ? "! " : "? ";
@@ -550,9 +631,9 @@ function render() {
   byId("time-state").textContent = task.deadlineState || "以平台记录为准";
   byId("deadline-label").textContent = task.deadlineLabel || "平台截止时间";
   byId("due").textContent = task.deadlineDisplayed;
-  byId("source").textContent = [task.platform, task.platformFilter].filter(Boolean).join(" · ");
+  byId("source").textContent = task.platform + " · " + task.platformFilter;
   byId("progress").textContent = task.progressDisplayed || "未记录";
-  byId("verified").textContent = "平台核实记录 " + (board.verified || "尚无检查时间") + " · 截止时间按平台原样显示。刷新按钮只更新本地文件。";
+  byId("verified").textContent = "平台核实记录 " + board.verified + " · 截止时间按平台原样显示。刷新按钮只更新本地文件。";
   byId("platform-note").textContent = task.statusBasis || task.statusNote || "";
   byId("reminder-note").textContent = task.reminderDismissed
     ? "无需提醒 · " + task.reminderReason + "。平台状态保留，不计入待完成数。"
@@ -567,7 +648,7 @@ function render() {
   byId("uploaded").textContent = task.platform + "答题区附件：" + (task.answerAttachmentObserved || "未记录");
   const report = board.links.find(l => l.role === "report");
   byId("report").replaceChildren(report ? linkedRow(report) : node("p", "待关联本地原件", "tag"));
-  byId("expected").replaceChildren(...(task.teacherAttachments || []).map(a => node("p", "老师发布：" + a.name + (a.displayedSize ? "（" + a.displayedSize + "）" : ""))));
+  byId("expected").replaceChildren(...task.teacherAttachments.map(a => node("p", "老师发布：" + a.name + "（" + a.displayedSize + "）")));
   if (task.attachmentsNote) byId("expected").append(node("small", task.attachmentsNote));
   const materials = board.links.filter(l => l.role === "material");
   byId("materials").replaceChildren(...materials.map(linkedRow));
@@ -575,13 +656,19 @@ function render() {
   byId("package").disabled = !board.links.length || board.links.some(link => !link.available);
   byId("package-note").textContent = board.links.some(link => !link.available) ? "有原件已失效，请先更新关联。" :
     board.links.length ? "将这 " + board.links.length + " 个已关联文件复制到 ZIP 中。" : "先关联本机报告或资料即可打包。";
-  byId("scan").textContent = (board.inbox || "尚未配置下载收件箱") + (board.scanned ? " · 本地读取于 " + new Date(board.scanned).toLocaleString("zh-CN") : "");
+  byId("scan").textContent = board.inbox + " · 本地读取于 " + new Date(board.scanned).toLocaleString("zh-CN");
   byId("warnings").textContent = board.warnings.join("；");
   renderInbox();
   renderTaskList();
 }
 function renderSync(sync) {
-  const history = board.courseScope || [];
+  renderPlatformSettings();
+  byId("cx-status").hidden = !platformEnabled("学习通");
+  byId("mooc-status").hidden = !platformEnabled("中国大学 MOOC");
+  byId("feed-status").hidden = !platformEnabled("雨课堂");
+  for (const id of ["sync-message","sync-scope","sync-time"]) byId(id).hidden = !!platformPreferences;
+
+  const history = (board.courseScope || []).filter(c => platformEnabled(c.platform));
   const box = byId("course-history");
   box.hidden = history.length === 0;
   box.querySelector("summary").textContent = "历史班级 · 已跳过 "+history.filter(c => !c.pinned).length+" 个";
@@ -631,16 +718,17 @@ function moocNote() {
 }
 function platformSyncNote(platform) {
   const notes = [];
-  if (!platform || platform === "雨课堂") notes.push(board.sync.running ? "雨课堂按课程轮流更新。" : "雨课堂显示上次读取的记录。");
-  if (!platform || platform === "学习通") notes.push(learningNote());
-  if (!platform || platform === "中国大学 MOOC") notes.push(moocNote());
+  if (platformEnabled("雨课堂") && (!platform || platform === "雨课堂")) notes.push(board.sync.running ? "雨课堂按课程轮流更新。" : "雨课堂显示上次读取的记录。");
+  if (platformEnabled("学习通") && (!platform || platform === "学习通")) notes.push(learningNote());
+  if (platformEnabled("中国大学 MOOC") && (!platform || platform === "中国大学 MOOC")) notes.push(moocNote());
+  if (platformEnabled("PTA（拼题 A）") && (!platform || platform === "PTA（拼题 A）" || platform === "PTA")) {const state=connectionGuidance("pta",connectionStatus); notes.push("PTA · "+state.label+" · "+state.next);}
   return " " + notes.join(" ");
 }
 function learningNote() {
   const courses=board.cxCourses || [];
-  if (!board.cxSync?.checked) return " 学习通"+(board.cxSync?.issue ? " · "+board.cxSync.issue : (courses.length ? "等待浏览器连接，目前显示已有记录。" : "等待首次同步。"));
+  if (!board.cxSync?.checked) return " 学习通"+(board.cxSync?.issue ? " · "+board.cxSync.issue : "等待浏览器连接，目前显示已有记录。");
   const checked=courses.filter(c=>c.checked).length;
-  const retry=courses.filter(c=>(c.note || "").startsWith("待重试")).length;
+  const retry=courses.filter(c=>c.note.startsWith("待重试")).length;
   return " 学习通最近记录覆盖 "+checked+"/"+courses.length+" 个班级"+(retry ? "，"+retry+" 门待重试" : "")+
     (board.cxSync.issue ? " · "+board.cxSync.issue : "")+"。";
 }
@@ -648,14 +736,17 @@ async function read() {
   const version = syncVersion;
   const requestId = ++readVersion;
   const response = await fetch("/api/workbench?task=" + encodeURIComponent(selectedTask));
-  if (!response.ok) throw new Error("无法读取工作台，请确认本地服务正在运行，然后刷新重试。");
+  if (!response.ok) throw new Error("无法读取工作台，请确认新版服务已启动，核实记录仍在工具目录。");
   const result = await response.json();
+  const [preferences, status] = await Promise.all(["/api/platform-preferences","/api/sync/status"].map(async path => {
+    try {const reply=await fetch(path);return reply.ok ? await reply.json() : null;} catch {return null;}
+  }));
   if (requestId !== readVersion) return;
   if (version !== syncVersion || syncPending) result.sync = board?.sync || result.sync;
-  // 空安装也使用同一接口；没有课程或选中作业时不创建示例记录。
-  board = {...result, task:result.task || {}, courses:result.courses || [], cxCourses:result.cxCourses || [],
-    assignments:result.assignments || [], links:result.links || [], files:result.files || [], warnings:result.warnings || [],
-    feeds:result.feeds || {}, sync:{enabled:false,running:false,message:"等待连接浏览器扩展。",scope:"尚未同步课程",...result.sync}};
+  if (preferences && typeof preferences.configured === "boolean" && Array.isArray(preferences.selected)) platformPreferences = preferences;
+  connectionStatus = status;
+  board = result;
+  renderPlatformSettings();
   // 平台延长截止或清走旧作业时，也释放对应的本地已读标记。
   const active = new Set(board.assignments.filter(t => taskKind(t) === "missed").map(missedKey));
   for (const key of seenInMemory) if (!active.has(key)) seenInMemory.delete(key);
@@ -664,10 +755,6 @@ async function read() {
   } catch {}
   render();
   if (!syncPending) renderSync(board.sync);
-  if (!selectedCourse && !courseDirectory().length && !byId("connector-help").dataset.introduced) {
-    byId("connector-help").open = true;
-    byId("connector-help").dataset.introduced = "true";
-  }
 }
 async function run(operation) {
   if (busy) return;
@@ -696,6 +783,21 @@ function save(role, path, operation) {
   });
 }
 byId("bind").onsubmit = e => { e.preventDefault(); save("report", byId("report-path").value, "link"); };
+byId("platform-preferences").onchange = () => {preferencesEditing = true;};
+byId("platform-preferences").onsubmit = e => {
+  e.preventDefault();
+  const selected=[...document.querySelectorAll('#platform-preferences input[name="platform"]')].filter(input=>input.checked).map(input=>input.value);
+  run(async()=>{
+    const response=await fetch("/api/platform-preferences",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({selected})});
+    if (!response.ok) throw new Error("平台选择保存失败，请确认新版服务已启动后重试。");
+    preferencesEditing=false;
+    platformPreferences={configured:true,selected};
+    byId("platform-filter").value="";
+    await read();
+  });
+};
+byId("retry-platforms").onclick = () => run(read);
+window.addEventListener("message",receiveConnectionResult);
 byId("find").oninput = renderInbox;
 function cleanInbox(action, path) {
   return run(async () => {

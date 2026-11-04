@@ -14,7 +14,7 @@ async function read(url) {
   const response=await fetch(url,{credentials:"include",cache:"no-store",signal:AbortSignal.timeout(14000)});
   if (!response.ok) throw new Error("平台读取失败 HTTP "+response.status);
   const host=new URL(response.url).hostname;
-  if (!["mooc1-api.chaoxing.com","mooc1.chaoxing.com","mooc2-ans.chaoxing.com"].includes(host)) throw new Error("登录失效，请在已安装课藏扩展的浏览器登录学习通");
+  if (!["mooc1-api.chaoxing.com","mooc1.chaoxing.com","mooc2-ans.chaoxing.com"].includes(host)) throw new Error("登录失效，请在联想浏览器登录学习通");
   return response.text();
 }
 function parse(markup) {
@@ -25,7 +25,7 @@ function parse(markup) {
 async function index() {
   const raw=await read(api+"/mycourse/backclazzdata?view=json&mcode=");
   let body;
-  try {body=JSON.parse(raw);} catch {throw new Error("课程目录未返回，请检查当前浏览器的学习通登录");}
+  try {body=JSON.parse(raw);} catch {throw new Error("课程目录未返回，请检查联想浏览器的学习通登录");}
   if (!Array.isArray(body.channelList)) throw new Error("课程目录格式有变或登录已过期");
   const courses=new Map();
   for (const channel of body.channelList) {
@@ -124,11 +124,11 @@ async function cycle() {
   if (busy) return;
   busy=true;
   try {
-    if (!(await send({action:"check"})).enabled) return;
+    if (!(await send({action:"check",platform:"cx"})).enabled) return;
     const courses=await index();
     const {next}=await send({action:"chaoxing",courses:[...courses.values()].map(({cid,clazz,name,started,ended})=>({cid,clazz,name,started,ended}))});
     for (const key of next) {
-      if (!(await send({action:"check"})).enabled) break;
+      if (!(await send({action:"check",platform:"cx"})).enabled) break;
       try {
         const result=await homework(courses.get(key));
         await send({action:"chaoxing",course:key,...result});

@@ -58,6 +58,9 @@ try:
     assert not empty["moocSync"]["checked"] and not empty["moocSync"]["issue"]
     assert empty["task"] == {} and empty["files"] == [] and empty["links"] == []
     assert get("/api/catalog")["files"] == []
+    assert get("/api/platform-preferences") == {"configured":False,"selected":[]}
+    platform_sync.platform_settings(["rain","cx","mooc","pta"])
+    assert get("/api/platform-preferences")["configured"] is True
     course = COURSE_ROOT / "大一上" / "测试课程"
     course.mkdir(parents=True)
     (course / "测试资料.txt").write_text("test", encoding="utf-8")

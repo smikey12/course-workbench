@@ -45,3 +45,13 @@ context.task.deadlineAt='2000-01-01T00:00:00Z';
 assert.equal(run('taskKind(task)'),'missed');
 assert.equal(run('pendingSummary(board.courses[1],[task],Date.now()).count'),'0 项');
 console.log('PASS platform identity, unsynced/unknown/zero/completed counts, isolated status and MOOC deadline reminders: '+web);
+
+run('platformPreferences={configured:false,selected:["rain","cx","mooc"]}');
+assert.equal(run('platformEnabled("中国大学 MOOC")'),true);
+assert.ok(run('courseDirectory().some(c => c.platform === "中国大学 MOOC")'));
+run('platformPreferences={configured:true,selected:["pta"]}');
+assert.equal(run('platformEnabled("中国大学 MOOC")'),false);
+assert.equal(run('platformEnabled("PTA（拼题 A）")'),true);
+assert.equal(run('connectionGuidance("pta",{enabled:true,connections:{pta:{selected:true,connected:false}}}).label'),'等待首次同步');
+assert.equal(run('connectionGuidance("pta",{enabled:true,connections:{pta:{permission:false,permissionCheckedAt:new Date().toISOString()}}}).label'),'需要授权');
+console.log('PASS legacy configured=false selection remains visible; selected platform is not a connection claim.');
