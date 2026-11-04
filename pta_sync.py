@@ -81,6 +81,7 @@ def _task(item, raw_course, name, now):
 
 def receive(conn, payload, now):
     rows = payload.get("courses")
+    active_only = payload.get("scope") == "active"
     issue = _text(payload.get("issue") or "", 2000)
     if rows is None and issue:
         conn.executemany("INSERT OR REPLACE INTO pta_meta VALUES(?,?)", [("issue",issue),("attempted",now)])
@@ -123,6 +124,45 @@ def receive(conn, payload, now):
                 prepared, task_ids = [], set()
                 for task in tasks:
                     raw_id, record = _task(task, _id(item["id"]), name, now)
+                    record["platformFilter"] = section or "PTA 本人题集元数据"
+                    record["statusBasis"] = (section or "PTA 本人题集元数据") + " · " + record["platformStatus"]
+                    if section == "PTA 个人题集概览":
+                        record["platformFilter"] = "PTA 个人题集概览"
+                        record["statusBasis"] = "PTA 个人题集概览中的可见元数据 · " + record["platformStatus"]
+                    previous = conn.execute("SELECT body FROM pta_work WHERE id=?", (record["id"],)).fetchone()
+                    old = json.loads(previous[0]) if previous else {}
+                    # A missing date is not evidence that the platform removed its deadline.
+                    if not record.get("deadlineAt") and old.get("deadlineAt"):
+                        record["deadlineAt"] = old["deadlineAt"]
+                        record["deadlineDisplayed"] = old.get("deadlineDisplayed") or datetime.fromisoformat(old["deadlineAt"]).astimezone(retention.CST).strftime("%Y-%m-%d %H:%M")
+                    proof = task.get("evidence")
+                    if proof is not None:
+                        if not isinstance(proof, dict) or proof.get("kind") != "problem_id_states" or proof.get("course") != str(item["id"]):
+                            raise ValueError("PTA 本人状态证据的题集归属无效")
+                        required, states = proof.get("requiredProblemIds"), proof.get("problemStates")
+                        if not isinstance(required, list) or not 0 < len(required) <= 5000 or any(not isinstance(p,str) or not re.fullmatch(r"[1-9][0-9]{0,24}",p) for p in required) or len(set(required)) != len(required):
+                            raise ValueError("PTA 全量题目 ID 证据无效")
+                        if not isinstance(states,list) or len(states) != len(required) or any(not isinstance(p,dict) or not isinstance(p.get("id"),str) for p in states) or len({p["id"] for p in states}) != len(states) or {p["id"] for p in states} != set(required):
+                            raise ValueError("PTA 本人状态未与全量题目 ID 逐项匹配")
+                        statuses = [p.get("status") for p in states]
+                        if any(s not in ("PROBLEM_ACCEPTED","PROBLEM_NO_ANSWER","PROBLEM_WRONG_ANSWER") for s in statuses):
+                            raise ValueError("PTA 本人状态仍在评判或未识别")
+                        expected = "已完成" if all(s == "PROBLEM_ACCEPTED" for s in statuses) else "未完成"
+                        if record["completionState"] != expected:
+                            raise ValueError("PTA 完成状态与题目 ID 证据矛盾")
+                        record.update(statusEvidence="problem_id_states",submissionEvidence=proof,statusVerifiedAt=now)
+                    elif active_only:
+                        record.update(completionState="待核实",platformStatus="待核实（本轮未取得完整本人题目状态证据）")
+                    if proof is None and not active_only and record["completionState"] == "已完成" and record["platformStatus"].startswith("本人全部"):
+                        record["statusEvidence"] = "accepted_all"
+                    if record["completionState"] == "待核实" and (old.get("statusEvidence") in ("accepted_all","problem_id_states") or old.get("completionState") == "已完成" and old.get("platformStatus", "").startswith("本人全部")):
+                        record.update(completionState=old["completionState"],statusEvidence=old.get("statusEvidence","accepted_all"),
+                            observedAt=old["observedAt"],directoryObservedAt=now,
+                            platformStatus=old["completionState"]+"（沿用上次核实结果，本轮详情待核实）",
+                            statusBasis="沿用 "+old["observedAt"]+" 的个人状态证据；本轮只更新目录，未重新核实提交")
+                        for field in ("submissionEvidence","statusVerifiedAt"):
+                            if field in old:
+                                record[field] = old[field]
                     if raw_id in task_ids:
                         raise ValueError("PTA 作业编号重复，保留上次清单")
                     task_ids.add(raw_id)
@@ -152,14 +192,19 @@ def receive(conn, payload, now):
             conn.execute("UPDATE pta_courses SET attempted=?,note=? WHERE id=?", (now,"待重试 · "+why,key))
     if issue:
         failures.insert(0,issue)
-    if not failures:
+    if not failures and not active_only:
         # 只有整份目录及各班成功时，才把未出现的班级收起；部分失败不得清空缓存。
         conn.execute("UPDATE pta_courses SET listed=0")
         conn.executemany("UPDATE pta_courses SET listed=1 WHERE id=?", [(key,) for key in seen])
         conn.execute("INSERT OR REPLACE INTO pta_meta VALUES('checked',?)", (now,))
+    if active_only and not failures:
+        conn.executemany("INSERT OR REPLACE INTO pta_meta VALUES(?,?)", [("activeChecked",now),("activeIds",json.dumps(sorted(seen))),("readerBuild",_text(payload.get("readerBuild") or "",100))])
     summary = "；".join(failures[:10])
     if len(failures) > 10:
         summary += f"；另有 {len(failures)-10} 项失败"
+    warning = _text(payload.get("warning") or "", 2000)
+    if warning:
+        summary = (summary + "；" if summary else "") + warning
     conn.executemany("INSERT OR REPLACE INTO pta_meta VALUES(?,?)", [("issue",summary),("attempted",now)])
     course_scope.refresh(conn,"pta",datetime.fromisoformat(now))
     return {"ok": True, "count":len(success), "failed":len(failures)}

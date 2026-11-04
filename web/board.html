@@ -5,20 +5,12 @@
   <title>课藏 · 作业工作台</title><link rel="stylesheet" href="/board.css"><script src="/board.js" defer></script>
 </head>
 <body>
-  <header><div class="bar"><b>课藏</b><nav aria-label="主导航"><a aria-current="page" href="/">作业工作台</a><a href="/library">本地文件目录</a></nav></div></header>
+  <header><div class="bar"><b>课藏</b><nav aria-label="主导航"><a id="workbench-nav" aria-current="page" href="#">作业工作台</a><a href="/library">本地文件目录</a><a id="settings-nav" href="#settings">设置</a></nav></div></header>
   <main>
-    <div class="intro"><div><p class="kicker">我的课程 / 作业</p><h1>作业工作台</h1></div><button id="refresh">↻ 刷新本地文件</button></div>
     <p id="notice" role="status">正在读取作业与本地文件…</p>
-    <section aria-label="平台选择"><details id="platform-settings" open><summary>连接平台设置</summary>
-      <p>选择需要连接的平台；以后可随时在这里更改。取消选择会停止展示该平台的课程与提醒，已保存记录仍由本机服务保留。</p>
-      <form id="platform-preferences"><div class="platform-choices">
-        <label><input type="checkbox" name="platform" value="cx"> 学习通</label>
-        <label><input type="checkbox" name="platform" value="rain"> 雨课堂</label>
-        <label><input type="checkbox" name="platform" value="mooc"> 中国大学 MOOC</label>
-        <label><input type="checkbox" name="platform" value="pta"> PTA</label>
-      </div><button type="submit">保存平台选择</button> <button type="button" id="retry-platforms">重新检查连接</button></form>
-      <p id="preferences-message" role="status">正在读取平台设置…</p>
-      </details><div id="platform-connections" aria-live="polite"></div></section>
+    <div id="workbench-view">
+    <div class="intro"><div><p class="kicker">我的课程 / 作业</p><h1>作业工作台</h1></div><button id="refresh">↻ 刷新本地文件</button></div>
+    <p id="setup-hint" hidden>首次使用请先<a href="#settings">选择连接平台并完成设置</a>。</p>
     <section aria-label="下载预清理">
       <details id="cleanup-panel"><summary>下载收件箱 · 预清理 <span id="cleanup-count"></span></summary>
         <p>超过六个自然月未使用、且未关联作业的下载文件可移入预清理。保留原子目录，可恢复原位。查看后可在资源管理器中自行删除。</p>
@@ -34,23 +26,13 @@
       <div class="card-head"><h2 id="directory-title">平台课程目录</h2><input type="search" id="task-search" aria-label="搜索课程或作业" placeholder="搜索课程或作业"></div>
       <p class="muted" id="directory-info"></p>
       <div class="directory-controls"><div class="input-row"><label for="platform-filter">平台</label><select id="platform-filter"><option value="">全部平台</option><option>雨课堂</option><option>学习通</option><option>中国大学 MOOC</option><option>PTA（拼题 A）</option></select>
-      <label for="list-status">作业状态</label><select id="list-status"><option value="">全部状态</option><option value="unfinished">未完成</option><option value="unknown">待核实</option><option value="completed">已完成</option><option value="missed">过期未做</option><option value="dismissed">无需提醒</option></select></div>
+      <label for="list-status">作业状态</label><select id="list-status"><option value="">全部状态</option><option value="unfinished">未完成</option><option value="upcoming">未开放</option><option value="unknown">待核实</option><option value="completed">已完成</option><option value="missed">过期未做</option><option value="dismissed">无需提醒</option></select></div>
       <div id="directory-sort" class="directory-sort">
         <label>优先学期 <select id="preferred-term"><option value="">本学期</option></select></label>
         <label>课程排序 <select id="course-sort"><option value="work">待完成数 · 从多到少</option><option value="time">开课时间 · 从新到旧</option><option value="name">课程名称 · 拼音顺序</option></select></label>
       </div></div>
       <div id="task-list"></div>
       <button type="button" id="toggle-directory" aria-controls="task-list" aria-expanded="false" hidden></button>
-    </section>
-    <section id="sync-panel" aria-label="平台同步"><div class="card-head"><h2>平台同步</h2><div><button id="sync-start" disabled>正在检查连接…</button> <button id="sync-stop" disabled>暂停接收</button></div></div><p id="sync-message" role="status"></p><p id="sync-error" role="alert"></p><p id="sync-scope" class="muted"></p><p id="sync-time" class="muted"></p>
-      <p id="feed-status" class="muted"></p>
-      <p id="cx-status" class="muted" role="status"></p>
-      <p id="mooc-status" class="muted" role="status"></p>
-      <details id="course-history" hidden><summary></summary><div id="scope-list"></div></details>
-      <details id="connector-help"><summary>所选平台的连接步骤</summary>
-        <p>在使用的 Chromium 浏览器中安装项目内「雨课堂浏览器连接」扩展：进入扩展管理页，打开开发者模式，加载该文件夹。保持浏览器和本机服务运行。</p>
-        <div id="selected-platform-help"></div>
-      </details>
     </section>
     <section id="assignment" hidden tabindex="-1">
       <button id="back-course">← 返回本课程</button>
@@ -69,5 +51,31 @@
     </section>
     <section id="inbox" hidden><div class="card-head"><div><p class="kicker">学习通下载</p><h2>下载收件箱 <span id="total"></span></h2></div><input type="search" id="find" aria-label="查找下载文件" placeholder="查找文件名或子目录"></div>
       <p id="scan" class="muted"></p><p id="warnings" role="status"></p><div id="files"></div></section>
+    </div>
+    <div id="settings-view" hidden>
+      <a href="#" class="settings-back">← 返回作业工作台</a>
+      <h1 id="settings-title" tabindex="-1">设置</h1>
+      <p class="muted">选择连接平台，查看连接状态和授权步骤。</p>
+    <section aria-label="平台选择"><details id="platform-settings" open><summary>连接平台设置</summary>
+      <p>选择需要连接的平台；以后可随时在这里更改。取消选择会停止展示该平台的课程与提醒，已保存记录仍由本机服务保留。</p>
+      <form id="platform-preferences"><div class="platform-choices">
+        <label><input type="checkbox" name="platform" value="cx"> 学习通</label>
+        <label><input type="checkbox" name="platform" value="rain"> 雨课堂</label>
+        <label><input type="checkbox" name="platform" value="mooc"> 中国大学 MOOC</label>
+        <label><input type="checkbox" name="platform" value="pta"> PTA</label>
+      </div><button type="submit">保存平台选择</button> <button type="button" id="retry-platforms">重新检查连接</button></form>
+      <p id="preferences-message" role="status">正在读取平台设置…</p>
+      </details><div id="extension-install" class="platform-connection" role="status"></div><div id="platform-connections" aria-live="polite"></div></section>
+    <section id="sync-panel" aria-label="平台同步"><div class="card-head"><h2>平台同步</h2><div><button id="sync-start" disabled>正在检查连接…</button> <button id="sync-stop" disabled>暂停接收</button></div></div><p id="sync-message" role="status"></p><p id="sync-error" role="alert"></p><p id="sync-scope" class="muted"></p><p id="sync-time" class="muted"></p>
+      <p id="feed-status" class="muted"></p>
+      <p id="cx-status" class="muted" role="status"></p>
+      <p id="mooc-status" class="muted" role="status"></p>
+      <details id="course-history" hidden><summary></summary><div id="scope-list"></div></details>
+      <details id="connector-help"><summary>所选平台的连接步骤</summary>
+        <p>请在 Microsoft Edge 中使用上方安装状态指引。首次安装须等待正式商店上架；已有扩展会在当前页面自动检测。连接后按所选平台完成授权与登录，保持浏览器和本机服务运行。</p>
+        <div id="selected-platform-help"></div>
+      </details>
+    </section>
+    </div>
   </main>
 </body></html>

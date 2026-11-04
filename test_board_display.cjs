@@ -44,3 +44,19 @@ assert.equal(run('taskTone({},"completed",now)'),'completed');
 assert.equal(run('taskKind(tasks[1])'),'dismissed');
 assert.equal(run('pendingSummary(course,[tasks[1]],now).count'),'0 项');
 console.log('PASS: pending-first ranking across three platforms/modes; six-row preview; term priority; partial coverage; dismissed tasks; 72h tone boundaries.');
+
+// Default ties use completed evidence, then business dates, before names/IDs.
+context.rows=[
+ {course:{id:"a",name:"Alpha",started:"2026-01-01"},term:"",total:0,completedTotal:1,latestWorkTime:Date.parse("2026-01-01T00:00:00Z"),summary:{order:0}},
+ {course:{id:"b",name:"Beta",started:"2026-02-01"},term:"",total:0,completedTotal:2,latestWorkTime:Date.parse("2025-01-01T00:00:00Z"),summary:{order:4}},
+ {course:{id:"c",name:"Charlie",started:"2026-03-01"},term:"",total:0,completedTotal:1,latestWorkTime:Date.parse("2026-03-01T00:00:00Z"),summary:{order:4}},
+ {course:{id:"d",name:"Delta",started:"2026-04-01"},term:"",total:0,completedTotal:1,latestWorkTime:null,summary:{order:0}}];
+assert.equal(run('[...rows].sort((a,b)=>compareCourses(a,b,"2026秋","work")).map(r=>r.course.id).join(",")'),'b,c,a,d');
+assert.equal(run('[...rows].sort((a,b)=>compareCourses(a,b,"2026秋","name")).map(r=>r.course.id).join(",")'),'a,b,c,d');
+assert.equal(run('[...rows].sort((a,b)=>compareCourses(a,b,"2026秋","time")).map(r=>r.course.id).join(",")'),'d,c,b,a');
+assert.equal(run('workBusinessDate({publishedAt:"2026-01-01T00:00:00Z",deadlineAt:"2027-01-01T00:00:00Z"})'),Date.parse('2026-01-01T00:00:00Z'));
+assert.equal(run('workBusinessDate({startAt:"2026-02-01T00:00:00Z",deadlineAt:"2027-01-01T00:00:00Z"})'),Date.parse('2026-02-01T00:00:00Z'));
+assert.equal(run('latestCourseWorkTime({},[{deadlineAt:"2026-01-01T00:00:00Z"},{deadlineAt:"2026-02-01T00:00:00Z"}])'),Date.parse('2026-02-01T00:00:00Z'));
+assert.equal(run('latestCourseWorkTime({publishedAt:"2026-01-01T00:00:00Z"},[])'),Date.parse('2026-01-01T00:00:00Z'));
+assert.equal(run('latestCourseWorkTime({name:"2099年课程",checked:"2099-01-01",started:null},[{verified:"2099-01-01",observedAt:"2099-01-01",deadline:"2099年末"}])'),null);
+console.log('PASS pending/completed/business-time tie order, unknown dates last, publication/open preference, empty-course directory date and no sync/name inference; manual sorts unchanged.');

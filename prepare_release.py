@@ -11,6 +11,8 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
 FILES = (
+    "build_edge_package.py", "test_edge_first_install.cjs", "docs/edge-publishing.md", "docs/privacy-template.md",
+    "雨课堂浏览器连接/icons/icon-16.png", "雨课堂浏览器连接/icons/icon-32.png", "雨课堂浏览器连接/icons/icon-48.png", "雨课堂浏览器连接/icons/icon-128.png",
     ".gitignore", "README.md", "VERSION", "UPDATE_FORMAT.md", "public_settings.py", "prepare_release.py",
     "updater.py", "test_updater.py", "launcher.py", "test_launcher.py", "test_prepare_release.py",
     "pta_sync.py", "platform_preferences.py", "test_pta_sync.py", "test_platform_preferences.py",
@@ -47,6 +49,15 @@ def source_snapshot():
         if path.is_symlink() or not path.is_file() or path.resolve() != path:
             raise ValueError(f"发布文件缺失或路径无效：{name}")
         snapshot[name] = path.read_bytes()
+        if path.suffix == ".png":
+            import struct
+            content = snapshot[name]
+            if not name.startswith("雨课堂浏览器连接/icons/") or content[:8] != b"\x89PNG\r\n\x1a\n" or len(content) > 131072:
+                raise ValueError("只允许受控扩展图标：" + name)
+            width, height = struct.unpack(">II", content[16:24])
+            if width != height or width not in (16, 32, 48, 128):
+                raise ValueError("扩展图标尺寸无效：" + name)
+            continue
         text = snapshot[name].decode("utf-8-sig")
         if re.search(r"(?i)(?<![a-z\\])[a-z]:[\\/]", text):
             raise ValueError(f"发现固定的 Windows 绝对路径：{name}")

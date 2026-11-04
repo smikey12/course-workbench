@@ -23,7 +23,22 @@ async function reconnectSelected() {
  } catch {receiverOnline=false;}
 }
 function startConnector() {chrome.alarms.create("connector-retry",{periodInMinutes:1});reconnectSelected();}
-chrome.runtime.onInstalled.addListener(startConnector);
+async function injectExistingWorkbenches() {
+ // 声明式 content_scripts 不会补跑安装前已打开的页面。只补注入本机源的顶层帧，
+ // 沿用 manifest 已有 host_permissions；bridge 自身处理重复注入和页面新挑战。
+ try {
+  const tabs=await chrome.tabs.query({url:"http://127.0.0.1:8765/*"});
+  await Promise.allSettled(tabs.filter(tab=>{
+   if(!Number.isInteger(tab.id) || tab.id<0) return false;
+   try {const url=new URL(tab.url);return url.origin==="http://127.0.0.1:8765" && !url.username && !url.password;}
+   catch{return false;}
+  }).map(async tab=>{
+   // 标签关闭、导航离开本机源或页面暂不可注入，不影响其余标签及后台重连。
+   await chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},world:"ISOLATED",files:["workbench-bridge.js"]});
+  }));
+ } catch { /* 查询失败时保留定时重连；新导航仍由声明式 content_script 连接。 */ }
+}
+chrome.runtime.onInstalled.addListener(()=>{startConnector();return injectExistingWorkbenches();});
 chrome.runtime.onStartup.addListener(startConnector);
 chrome.alarms.onAlarm.addListener(a=>{if(a.name==="connector-retry") reconnectSelected();});
 chrome.permissions.onAdded.addListener(()=>reconnectSelected());

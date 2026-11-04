@@ -24,3 +24,6 @@ release/
 .kecang-update/
 
 .kecang-update.lock
+
+# Only audited original extension icons are source assets.
+!雨课堂浏览器连接/icons/*.png

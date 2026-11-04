@@ -23,7 +23,7 @@ class PublicReleaseTests(unittest.TestCase):
                 self.assertEqual(set(bundle.namelist()), set(names))
                 self.assertIsNone(bundle.testzip())
             self.assertFalse(any(name.startswith(("data/", ".git/", "release/")) for name in names))
-            self.assertFalse(any(name.endswith((".sqlite3", ".log", ".png", ".jpg")) for name in names))
+            self.assertFalse(any(name.endswith((".sqlite3", ".log", ".jpg")) for name in names))
 
     def test_isolated_first_run_sync_and_detail(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -74,6 +74,14 @@ try:
     assert len(board["courses"]) == 1 and len(board["assignments"]) == 1
     task = board["assignments"][0]
     assert task["courseId"] == "101" and task["completion"] == "未完成"
+    conn = platform_sync.rain_catalog.open_db(platform_sync.DATABASE)
+    with conn:
+        raw = json.loads(conn.execute("SELECT record FROM tasks WHERE id=?", (task["id"],)).fetchone()[0])
+        raw["publishedAt"] = "2042-01-02T03:04:05+08:00"
+        conn.execute("UPDATE tasks SET record=? WHERE id=?", (json.dumps(raw), task["id"]))
+    conn.close()
+    summary = get("/api/workbench")["assignments"][0]
+    assert summary["publishedAt"] == raw["publishedAt"]
     detail = get("/api/workbench?task=" + task["id"])
     assert detail["task"]["title"] == "测试作业" and detail["task"]["id"] == task["id"]
     assert get("/api/workbench?task=missing")["task"] == {}

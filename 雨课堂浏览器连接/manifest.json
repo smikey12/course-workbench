@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "课藏 · 平台连接",
-  "version": "0.5.0",
-  "description": "定期读取已登录雨课堂账号的课程目录、章节作业和个人完成状态，同步到本机课藏。",
+  "version": "0.5.1",
+  "description": "连接本机课藏与已授权的课程平台，只读同步课程和作业元数据；需另行运行本机工作台。",
   "permissions": [
     "alarms",
     "offscreen",
-    "scripting"
+    "scripting",
+    "storage"
   ],
   "optional_host_permissions": [
     "https://mooc1-api.chaoxing.com/*",
@@ -25,7 +26,13 @@
   },
   "action": {
     "default_title": "课藏 · 课程同步",
-    "default_popup": "cx-access.html"
+    "default_popup": "cx-access.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
   },
   "content_scripts": [
     {
@@ -37,5 +44,11 @@
       ],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
 }

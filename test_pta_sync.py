@@ -127,6 +127,23 @@ class PtaTests(unittest.TestCase):
         self.receive([course(tasks=[dict(old,deadlineAt="2026-11-10T12:00:00+08:00")])],now=T2)
         self.assertEqual(len(self.read()["tasks"]),1)
 
+    def test_partial_directory_missing_date_preserves_known_deadline_and_allows_update(self):
+        self.receive([course()])
+        initial = self.read()["tasks"][0]
+        for value in (None, "", "omitted"):
+            task = dict(id="201", title="测试作业", status="个人状态待核实", completion="待核实")
+            if value != "omitted":
+                task["deadlineAt"] = value
+            self.receive([course(checked=False, tasks=[task], partial=True)], now=T2)
+            saved = self.read()["tasks"][0]
+            self.assertEqual(saved["deadlineAt"], initial["deadlineAt"])
+            self.assertEqual(saved["deadlineDisplayed"], initial["deadlineDisplayed"])
+            self.assertEqual(self.conn.execute("SELECT due FROM pta_work WHERE id=?", (saved["id"],)).fetchone()[0], initial["deadlineAt"])
+        revised = "2042-05-06T18:42:51+08:00"
+        self.receive([course(checked=False, tasks=[dict(task, deadlineAt=revised)], partial=True)], now=T2)
+        self.assertEqual(self.read()["tasks"][0]["deadlineAt"], revised)
+        self.assertEqual(self.read()["tasks"][0]["deadlineDisplayed"], "2042-05-06 18:42")
+
     def test_history_filter_and_pin_restore(self):
         old=course(tasks=[])
         old["term"]="2024春"
@@ -158,6 +175,29 @@ class PtaTests(unittest.TestCase):
         self.assertEqual(data["courses"][0]["checked"],T1)
         self.assertEqual(data["checked"],T1)
         self.assertIn("部分读取",data["courses"][0]["note"])
+
+    def test_complete_directory_shrinks_to_empty_and_records_success_with_warning(self):
+        self.receive([course(),course("102")],warning="部分个人状态未核实")
+        self.receive([course()],now=T2,warning="个人状态待核实")
+        self.assertEqual(len(self.read()["courses"]),1)
+        self.assertEqual(self.read()["checked"],T2)
+        self.receive([],now=T2,warning="目录完整")
+        self.assertEqual(self.read()["courses"],[])
+        self.assertEqual(self.read()["checked"],T2)
+
+    def test_directory_unknown_preserves_old_correct_submission_evidence_and_time(self):
+        done=dict(id="201",title="虚构题集",status="本人全部 2 题均有答案正确的提交记录",completion="已完成",deadlineAt=None)
+        self.receive([course(tasks=[done])])
+        # 兼容旧服务尚未写statusEvidence的既有正解记录。
+        with self.conn:
+            self.conn.execute("UPDATE pta_work SET body=json_remove(body,'$.statusEvidence')")
+        unknown=dict(done,status="待核实",completion="待核实")
+        self.receive([course(tasks=[unknown])],now=T2)
+        row=self.read()["tasks"][0]
+        self.assertEqual(row["completionState"],"已完成")
+        self.assertEqual(row["observedAt"],T1)
+        self.assertEqual(row["directoryObservedAt"],T2)
+        self.assertIn("未重新核实",row["statusBasis"])
 
     def test_platform_and_board_http_in_isolated_copy(self):
         source=Path(__file__).resolve().parent
@@ -230,6 +270,28 @@ finally:
         result=subprocess.run([sys.executable,"-B","-X","utf8","-c",program],cwd=isolated,env=env,capture_output=True,text=True,encoding="utf-8",timeout=30)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
         self.assertIn("verified",result.stdout)
+
+    def test_active_scope_exact_ids_and_directory_preserves_evidence_time_and_old_courses(self):
+        self.receive([course(),course("102")])
+        proof=dict(kind="problem_id_states",course="101",requiredProblemIds=["301","302"],
+                   problemStates=[dict(id="301",status="PROBLEM_ACCEPTED"),dict(id="302",status="PROBLEM_ACCEPTED")])
+        done=dict(id="201",title="合成题集",status="本人全部 2 题均有答案正确的提交记录",completion="已完成",evidence=proof)
+        self.receive([course(tasks=[done])],now=T2,scope="active")
+        tasks={t["courseId"]:t for t in self.read()["tasks"]}
+        self.assertEqual(tasks["pta-101"]["statusVerifiedAt"],T2)
+        self.assertEqual(len(self.read()["courses"]),2)
+        later="2026-11-03T12:00:00+08:00"
+        self.receive([course(tasks=[dict(id="201",title="合成题集",status="待核实",completion="待核实")])],now=later,scope="active")
+        row=next(t for t in self.read()["tasks"] if t["courseId"]=="pta-101")
+        self.assertEqual(row["completionState"],"已完成")
+        self.assertEqual(row["observedAt"],T2)
+        self.assertEqual(row["statusVerifiedAt"],T2)
+        self.assertEqual(row["submissionEvidence"],proof)
+        self.assertEqual(len(self.read()["courses"]),2)
+        bad=dict(proof,problemStates=[dict(id="301",status="PROBLEM_ACCEPTED"),dict(id="303",status="PROBLEM_ACCEPTED")])
+        result=self.receive([course(tasks=[dict(done,evidence=bad)])],now=later,scope="active")
+        self.assertEqual(result["failed"],1)
+        self.assertEqual(next(t for t in self.read()["tasks"] if t["courseId"]=="pta-101")["observedAt"],T2)
 
 
 if __name__=="__main__":

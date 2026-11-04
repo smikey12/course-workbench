@@ -1,0 +1,16 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const src=fs.readFileSync('web/board.js','utf8').split('function taskKind(')[0];
+const messages=[],window={postMessage:(message,origin)=>messages.push({message,origin})};
+const c=vm.createContext({document:{},window,location:{origin:'http://127.0.0.1:8765'},URL,Map,Date,setTimeout:()=>1,clearTimeout(){},Intl});
+vm.runInContext(src,c);
+vm.runInContext('renderPlatformSettings=()=>{}',c);
+assert.equal(vm.runInContext('edgeStoreUrl()',c),null);
+c.probeCurrentExtension();
+const nonce=messages.at(-1).message.nonce;
+assert.equal(messages.at(-1).message.type,'kecang-extension-probe');
+for(const event of [{source:window,origin:c.location.origin,data:{type:'kecang-extension-ready',nonce:'wrong',installed:true}},{source:{},origin:c.location.origin,data:{type:'kecang-extension-ready',nonce,installed:true}}])c.receiveExtensionReady(event);
+assert.equal(vm.runInContext('currentPageExtension',c),false);
+c.receiveExtensionReady({source:window,origin:c.location.origin,data:{type:'kecang-extension-ready',nonce,installed:true}});
+assert.equal(vm.runInContext('currentPageExtension',c),true);
+const html=fs.readFileSync('web/board.html','utf8');assert.ok(html.includes('id="settings-nav"'));assert.ok(fs.readFileSync('web/board.js','utf8').includes('尚未上架，首次安装待开放'));
+console.log('PASS: settings view, no store install URL, current-page nonce handshake accepts correct evidence and rejects stale/foreign events.');

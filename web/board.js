@@ -16,6 +16,40 @@ let syncVersion = 0;
 let platformPreferences = null;
 let connectionStatus = null;
 let preferencesEditing = false;
+let settingsOpen = false;
+// 上架后仅填写人工核验的 Edge Add-ons 正式详情页；未上架保持 null。
+const EDGE_ADDONS_DETAIL_URL = null;
+let currentPageExtension = false;
+let extensionDetectedAt = 0;
+let extensionProbeNonce = "";
+let extensionProbeTimer;
+function edgeStoreUrl() {
+  if (!EDGE_ADDONS_DETAIL_URL) return null;
+  try {const u=new URL(EDGE_ADDONS_DETAIL_URL);return u.protocol === "https:" && u.hostname === "microsoftedge.microsoft.com" && /^\/addons\/detail\/[^/]+\/[a-p]{32}$/.test(u.pathname) && !u.search && !u.hash ? u.href : null;} catch {return null;}
+}
+function probeCurrentExtension() {
+  if (!connectionOriginSupported()) return;
+  extensionProbeNonce = globalThis.crypto?.randomUUID?.() || String(Date.now())+Math.random();
+  const nonce=extensionProbeNonce;
+  clearTimeout(extensionProbeTimer);
+  extensionProbeTimer=setTimeout(()=>{
+    if (nonce !== extensionProbeNonce) return;
+    currentPageExtension=false;
+    renderPlatformSettings();
+  },5000);
+  window.postMessage({type:"kecang-extension-probe",nonce},location.origin);
+}
+function receiveExtensionReady(event) {
+  const result=event.data;
+  if (event.source === window && event.origin === location.origin && result?.type === "kecang-extension-probe-request") {probeCurrentExtension();return;}
+  if (event.source !== window || event.origin !== location.origin || result?.type !== "kecang-extension-ready" || !extensionProbeNonce || result.nonce !== extensionProbeNonce || result.installed !== true) return;
+  clearTimeout(extensionProbeTimer);
+  const newlyDetected=!currentPageExtension;
+  currentPageExtension=true;
+  if (newlyDetected) extensionDetectedAt=Date.now();
+  renderPlatformSettings();
+  if (newlyDetected && board) run(read);
+}
 const connectionRequests = new Map();
 const connectionFeedback = new Map();
 const PLATFORMS = {cx:{name:"学习通",url:"https://mooc1.chaoxing.com/"},rain:{name:"雨课堂",url:"https://www.yuketang.cn/web"},mooc:{name:"中国大学 MOOC",url:"https://www.icourse163.org/"},pta:{name:"PTA（拼题 A）",url:"https://pintia.cn/"}};
@@ -23,6 +57,14 @@ function platformEnabled(name) {
   if (!platformPreferences) return true;
   const key = name === "PTA" ? "pta" : Object.keys(PLATFORMS).find(k => PLATFORMS[k].name === name);
   return platformPreferences.selected.includes(key);
+}
+function applyRouteVisibility() {
+  byId("workbench-view").hidden = settingsOpen;
+  byId("settings-view").hidden = !settingsOpen;
+  document.title = settingsOpen ? "课藏 · 设置" : "课藏 · 作业工作台";
+  for (const [id,active] of [["workbench-nav",!settingsOpen],["settings-nav",settingsOpen]]) {
+    if (active) byId(id).setAttribute("aria-current","page"); else byId(id).removeAttribute("aria-current");
+  }
 }
 function connectionGuidance(key, status) {
   if (!status) return {label:"连接状态暂不可用",next:"点击重新检查连接；已有记录不代表当前已连接。"};
@@ -38,6 +80,11 @@ function connectionGuidance(key, status) {
   if (freshAccess && access.allowed === false) return {label:"需要授权",next:"打开浏览器工具栏的课藏扩展，允许读取此平台。"};
   if (/登录|login|未认证|401/i.test(message)) return {label:"需要登录或重新登录",next:"在安装扩展的同一浏览器登录平台，再重新检查。"};
   if (connection.connected === true) return {label:problem ? "已连接，部分结果待核实" : "已收到同步结果",next:(problem ? message : "") || "最近成功："+new Date(connection.lastSuccess).toLocaleString("zh-CN")+"。后续按扩展周期检查。"};
+  const partialCourses = (state.courses || []).filter(c => c.attempted && /部分|仅当前|概览/.test(c.note || message));
+  if (partialCourses.length) {
+    const attempted = partialCourses.map(c=>c.attempted).sort().pop();
+    return {label:"已保留部分读取记录",next:"上次部分读取："+new Date(attempted).toLocaleString("zh-CN")+"。尚未确认完整同步成功。"+message};
+  }
   if (state.connected === false || status.extension?.connected === false) return {label:"未检测到扩展连接",next:"确认已安装并启用课藏扩展，保持浏览器运行，再重新检查。"};
   if (message && !state.directory) return {label:"尚未成功同步",next:message};
   if (problem) return {label:"部分结果待核实",next:message};
@@ -54,10 +101,12 @@ function requestPlatformConnection(key) {
     return;
   }
   if (!PLATFORMS[key] || !platformEnabled(PLATFORMS[key].name) || connectionRequests.has(key)) return;
+  if (!currentPageExtension) {probeCurrentExtension();return;}
   connectionFeedback.set(key,"正在请求扩展打开连接页…");
   const timer=setTimeout(()=>{
     connectionRequests.delete(key);
-    connectionFeedback.set(key,"未收到扩展响应。请安装或重新加载课藏扩展，允许它访问本机工作台，刷新本页后重试。");
+    connectionFeedback.set(key,"扩展连接页暂未响应，请稍后重试；无需改变已保存的平台选择。");
+    probeCurrentExtension();
     renderPlatformSettings();
   },8000);
   connectionRequests.set(key,timer);
@@ -77,20 +126,39 @@ function renderPlatformSettings() {
   const settings = byId("platform-settings");
   if (platformPreferences) {
     if (!preferencesEditing) for (const input of document.querySelectorAll('#platform-preferences input[name="platform"]')) input.checked = platformPreferences.selected.includes(input.value);
-    if (!settings.dataset.initialized) {settings.open = !platformPreferences.configured; settings.dataset.initialized = "1";}
+    if (!settings.dataset.initialized) {settings.open = settingsOpen || !platformPreferences.configured; settings.dataset.initialized = "1";}
   }
   const selected = platformPreferences?.selected || [];
+  const install=byId("extension-install");
+  install.replaceChildren();
+  install.append(node("b",currentPageExtension ? "当前页面已检测到课藏扩展" : "当前页面尚未检测到课藏扩展"));
+  if (!connectionOriginSupported()) {
+    const link=node("a","打开默认工作台");link.href="http://127.0.0.1:8765/#settings";link.target="_blank";link.rel="noopener noreferrer";install.append(link);
+  } else if (!currentPageExtension) {
+    const store=edgeStoreUrl();
+    if (store) {const link=node("a","安装课藏扩展");link.href=store;link.target="_blank";link.rel="noopener noreferrer";install.append(link,node("p","在 Edge 商店确认安装后，保留本设置页，检测会自动继续。"));}
+    else install.append(node("p","尚未上架，首次安装待开放。已经安装的用户请确认 Edge 中扩展已启用，并保留本页等待自动检测。"));
+  } else install.append(node("p","从下方所选平台打开连接页，确认授权并登录。首次同步由扩展自动发起；实际记录到达后才显示数据状态。"));
+
+  byId("setup-hint").hidden = !!platformPreferences && platformPreferences.configured;
+
   byId("preferences-message").textContent = !platformPreferences ? "暂时无法读取平台设置，请重新检查；现有课程仍可浏览。" : !platformPreferences.configured ? (selected.length ? "已沿用原有平台，请确认勾选并保存；现有课程可继续浏览。" : "首次使用，请选择需要连接的平台并保存。") : selected.length ? "已选择 "+selected.map(k=>PLATFORMS[k]?.name || k).join("、")+"，可随时修改。" : "暂未选择平台。需要连接时可在此勾选并保存。";
   const rows = [];
   const help = [];
   for (const key of selected) {
     if (!PLATFORMS[key]) continue;
-    const platform = PLATFORMS[key], guidance = connectionGuidance(key, connectionStatus);
+    const platform = PLATFORMS[key], evidence = connectionGuidance(key, connectionStatus);
+    const newPartial=(connectionStatus?.[key]?.courses || []).some(c=>Date.parse(c.attempted)>extensionDetectedAt && /部分|仅当前|概览/.test(c.note || ""));
+    const newSuccess=Date.parse(connectionStatus?.connections?.[key]?.lastSuccess)>extensionDetectedAt;
+    let guidance = currentPageExtension ? evidence : {label:"等待当前页面连接扩展",next:"请先完成上方扩展检测。其他浏览器或以前的同步记录不能证明此页面已连接。"};
+    if (currentPageExtension && !/需要授权|需要登录|同步已暂停/.test(evidence.label) && newPartial && !newSuccess) guidance={label:"首批部分记录已入库",next:"尚未确认完整同步成功。"+(connectionStatus?.[key]?.message || "")};
+    else if (currentPageExtension && !/需要授权|需要登录|同步已暂停/.test(evidence.label) && newSuccess) guidance={label:"检测扩展后已有新数据入库",next:evidence.next};
+    else if (currentPageExtension && !/需要授权|需要登录|同步已暂停/.test(evidence.label) && connectionStatus?.connections?.[key]?.connected && !newSuccess) guidance={label:"已有记录，等待连接后首批数据",next:"历史同步记录不代表本次首次同步成功。请确认授权和登录，等待新结果。"};
     const row = node("div","","platform-connection");
     row.append(node("b",platform.name+" · "+guidance.label),node("p",guidance.next));
     const login = node("a","打开平台登录");login.href=platform.url;login.target="_blank";login.rel="noopener noreferrer";row.append(login);
-    const connect=node("button","打开扩展连接页");connect.type="button";
-    connect.disabled=connectionRequests.has(key) || !connectionOriginSupported();connect.onclick=()=>requestPlatformConnection(key);
+    const connect=node("button","连接并授权");connect.type="button";
+    connect.disabled=connectionRequests.has(key) || !connectionOriginSupported() || !currentPageExtension;connect.onclick=()=>requestPlatformConnection(key);
     if (!connectionOriginSupported()) {
       const explanation=node("p","扩展仅连接 127.0.0.1:8765；当前地址可继续浏览已有记录。连接与授权请使用默认入口。","muted");
       const defaultLink=node("a","打开默认工作台连接扩展");defaultLink.href="http://127.0.0.1:8765/";defaultLink.target="_blank";defaultLink.rel="noopener noreferrer";
@@ -111,9 +179,14 @@ function renderPlatformSettings() {
 
 function taskKind(task) {
   if (task.reminderDismissed) return "dismissed";
+  if (task.completion === "已完成") return "completed";
+  const start = Date.parse(task.startAt);
+  if (task.timeState === "未开放" || task.deadlineState === "未开放" || Number.isFinite(start) && start > Date.now()) return "upcoming";
+  if ((task.platform === "PTA（拼题 A）" || task.platform === "PTA") && !task.timeState && !Number.isFinite(start)) return "unknown";
+  if (task.timeState === "待核实") return "unknown";
   // 平台明确允许补交、重做时，即使过了截止时间也仍是待办。
   if (task.completion === "未完成" && task.deadlineState !== "可继续提交"
-      && (task.status === "过期未做" || task.deadlineState === "已截止" || dueTime(task) <= Date.now())) return "missed";
+      && (task.status === "过期未做" || task.timeState === "已结束" || task.deadlineState === "已截止" || dueTime(task) <= Date.now())) return "missed";
   if (task.completion === "未完成") return "unfinished";
   return task.completion === "已完成" ? "completed" : "unknown";
 }
@@ -254,7 +327,7 @@ function pendingSummary(course, tasks, now) {
   const pending = tasks.filter(t => taskKind(t) === "unfinished");
   const unknown = tasks.some(t => taskKind(t) === "unknown");
   if (!pending.length) {
-    const label = unknown ? "待核实" : !course.checked ? "待同步" : coverageIncomplete(course) ? "待核实" : "0 项";
+    const label = tasks.some(t => taskKind(t) === "upcoming") && !unknown ? "未开放" : unknown ? "待核实" : !course.checked ? "待同步" : coverageIncomplete(course) ? "待核实" : "0 项";
     return {count:label, hint:"", tone:"quiet", order:4};
   }
   const count = (coverageIncomplete(course) ? "已收录 " : unknown ? "至少 " : "") + pending.length + " 项";
@@ -309,6 +382,20 @@ function preferredTerm(courses, now) {
   return selector.value || current;
 }
 
+function workBusinessDate(record) {
+  for (const field of ["publishedAt","publishAt","releasedAt","startAt","openAt","availableAt","deadlineAt","endAt"]) {
+    const value=record[field];
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}(?:T|$)/.test(value)) continue;
+    const time=Date.parse(value);
+    if (Number.isFinite(time)) return time;
+  }
+  return null;
+}
+function latestCourseWorkTime(course, tasks) {
+  const dates=tasks.map(workBusinessDate).filter(time=>time !== null);
+  if (dates.length) return Math.max(...dates);
+  return workBusinessDate(course);
+}
 function compareCourses(a,b,term,mode) {
   // 先把真实待办放在零项/待同步之前，再在两组内保留学期与下拉排序。
   // 学期未知不等于历史课程，不能让有待办的课程被本学期零项挤出默认六行。
@@ -322,8 +409,11 @@ function compareCourses(a,b,term,mode) {
     const diff = timeKey(b).localeCompare(timeKey(a));
     if (diff) return diff;
   } else if (mode === "work") {
-    const diff = b.total - a.total || a.summary.order - b.summary.order;
+    const diff = b.total - a.total || (b.completedTotal ?? -1) - (a.completedTotal ?? -1);
     if (diff) return diff;
+    const aDate=a.latestWorkTime, bDate=b.latestWorkTime;
+    if (Number.isFinite(aDate) !== Number.isFinite(bDate)) return Number.isFinite(bDate) ? 1 : -1;
+    if (Number.isFinite(aDate) && aDate !== bDate) return bDate-aDate;
   }
   return courseNames.compare(a.course.name,b.course.name) || courseNames.compare(a.course.section || "",b.course.section || "") ||
     a.course.id.localeCompare(b.course.id);
@@ -380,7 +470,7 @@ function renderTaskList() {
   byId("alerts").classList.toggle("quiet", urgent.length === 0);
   byId("alerts").dataset.priority = pendingSummary({checked:true}, urgent, Date.now()).tone;
   byId("alert-note").textContent = (urgent.length ? "" : "当前范围内的已收录作业，没有符合筛选条件的未完成项。") +
-    platformSyncNote(platform) + " 已截止且未完成的作业只提醒一次，显示 8 秒后自动隐藏，可在课程的「已过期」中回看。截止满一个月的作业自动清理。";
+    "同步状态与连接步骤请查看「设置」。" + " 已截止且未完成的作业只提醒一次，显示 8 秒后自动隐藏，可在课程的「已过期」中回看。截止满一个月的作业自动清理。";
   byId("alert-count").textContent = urgent.length + " 项";
   byId("more-alerts").hidden = urgent.length <= 3;
   byId("more-alerts").textContent = allAlerts ? "收起" : "展开全部 " + urgent.length + " 项";
@@ -407,7 +497,7 @@ function renderTaskList() {
   }
 
   if (current) {
-    for (const [kind, label] of [["unfinished", "未完成"], ["unknown", "待核实"], ["completed", "已完成"], ["dismissed", "无需提醒"]]) {
+    for (const [kind, label] of [["unfinished", "未完成"], ["upcoming", "未开放"], ["unknown", "待核实"], ["completed", "已完成"], ["dismissed", "无需提醒"]]) {
       const group = tasks.filter(task => task.courseId === current.id && taskKind(task) === kind && matches(task, current.name.toLowerCase().includes(query)));
       if (!group.length) continue;
       const heading = node("h3", label + " · " + group.length + " 项", "group-heading");
@@ -468,12 +558,14 @@ function renderTaskList() {
       const summary = pendingSummary(course, own, now);
       summary.completed = completedSummary(course, own);
       const total = own.filter(t => taskKind(t) === "unfinished").length;
-      rows.push({course, summary, term:courseTerm(course), total: total || (summary.count === "0 项" ? 0 : -1)});
+      const completed=own.filter(t=>taskKind(t) === "completed").length;
+      rows.push({course, summary, term:courseTerm(course), total: total || (summary.count === "0 项" ? 0 : -1),
+        completedTotal:completed || (summary.completed === "0 项" ? 0 : -1), latestWorkTime:latestCourseWorkTime(course,own)});
     }
     const visible = directoryExpanded ? rows.length : Math.min(PREVIEW_COURSES,rows.length);
     byId("directory-info").textContent = "有待办优先 · "+term+" 优先 · 显示 "+visible+" / "+rows.length+" 门" +
       (rows.length !== courses.length ? "（全部 "+courses.length+" 门）" : "");
-    if (!rows.length) { list.append(node("p", platformPreferences && (!platformPreferences.selected.length) ? "请在连接平台设置中选择需要的平台并保存。" : "没有匹配的课程；尚未同步时，请按上方连接提示操作。")); return; }
+    if (!rows.length) { list.append(node("p", platformPreferences && (!platformPreferences.selected.length) ? "尚未选择平台，请使用顶部「设置」入口选择并保存。" : "没有匹配的课程；尚未同步时，请按上方连接提示操作。")); return; }
     const directory = node("div", "", "directory-rows");
     const labels = node("div", "", "directory-columns");
     labels.append(node("span","课程名称"),node("span","待完成"),node("span","已完成"));
@@ -490,6 +582,8 @@ function renderTaskList() {
 
 function taskTone(task, kind, now = Date.now()) {
   if (kind !== "unfinished") return kind;
+  if (task.timeState === "未开放" || Date.parse(task.startAt) > now) return "upcoming";
+  if (task.timeState === "待核实") return "unsure";
   const due = dueTime(task);
   if (task.deadlineState === "已截止" || Number.isFinite(due) && due <= now) return "overdue";
   if (!Number.isFinite(due)) return "unsure";
@@ -504,8 +598,9 @@ function taskCard(task, kind) {
     button.dataset.priority = tone === "unfinished" || tone === "overdue" ? "urgent" : tone;
     const icon = tone === "completed" ? "✓ " : tone === "unknown" ? "? " : "! ";
     button.append(node("small", task.platform + " · " + task.course),
-      node("b", task.title), node("span", icon + task.status, "pill"),
+      node("b", task.title), node("span", icon + (kind === "upcoming" ? "未开放" : kind === "unknown" && (task.platform === "PTA（拼题 A）" || task.platform === "PTA") && (!task.timeState || task.timeState === "待核实") ? "开放状态待核实 · "+task.completion : task.status), "pill"),
       node("span", "截止 " + task.deadline, "card-deadline"));
+    if (task.startAt) button.append(node("span","开放 "+new Date(task.startAt).toLocaleString("zh-CN"),"card-deadline"));
     button.title = "最近读取 " + task.verified;
     button.querySelector(".pill").dataset.tone = tone;
     button.onclick = () => navigate(task.courseId, task.id);
@@ -628,13 +723,13 @@ function render() {
   byId("completion").textContent = task.completionState || task.platformStatus;
   byId("completion").dataset.tone = tone;
   byId("completion").textContent = icon + byId("completion").textContent;
-  byId("time-state").textContent = task.deadlineState || "以平台记录为准";
+  byId("time-state").textContent = task.timeState || task.deadlineState || "以平台记录为准";
   byId("deadline-label").textContent = task.deadlineLabel || "平台截止时间";
   byId("due").textContent = task.deadlineDisplayed;
   byId("source").textContent = task.platform + " · " + task.platformFilter;
   byId("progress").textContent = task.progressDisplayed || "未记录";
   byId("verified").textContent = "平台核实记录 " + board.verified + " · 截止时间按平台原样显示。刷新按钮只更新本地文件。";
-  byId("platform-note").textContent = task.statusBasis || task.statusNote || "";
+  byId("platform-note").textContent = (task.startAt ? "开放时间："+new Date(task.startAt).toLocaleString("zh-CN")+"。" : "")+(task.statusBasis || task.statusNote || "");
   byId("reminder-note").textContent = task.reminderDismissed
     ? "无需提醒 · " + task.reminderReason + "。平台状态保留，不计入待完成数。"
     : "如已通过其他形式完成，或无需完成，可设为无需提醒；以后同步仍保留此设置。";
@@ -717,11 +812,11 @@ function moocNote() {
   return coverage + " · 最近全部成功 " + new Date(state.checked).toLocaleString("zh-CN") + "。";
 }
 function platformSyncNote(platform) {
-  const notes = [];
+  const notes=[];
   if (platformEnabled("雨课堂") && (!platform || platform === "雨课堂")) notes.push(board.sync.running ? "雨课堂按课程轮流更新。" : "雨课堂显示上次读取的记录。");
   if (platformEnabled("学习通") && (!platform || platform === "学习通")) notes.push(learningNote());
   if (platformEnabled("中国大学 MOOC") && (!platform || platform === "中国大学 MOOC")) notes.push(moocNote());
-  if (platformEnabled("PTA（拼题 A）") && (!platform || platform === "PTA（拼题 A）" || platform === "PTA")) {const state=connectionGuidance("pta",connectionStatus); notes.push("PTA · "+state.label+" · "+state.next);}
+  if (platformEnabled("PTA（拼题 A）") && (!platform || platform === "PTA（拼题 A）" || platform === "PTA")) {const state=connectionGuidance("pta",connectionStatus);notes.push("PTA · "+state.label+" · "+state.next);}
   return " " + notes.join(" ");
 }
 function learningNote() {
@@ -798,6 +893,9 @@ byId("platform-preferences").onsubmit = e => {
 };
 byId("retry-platforms").onclick = () => run(read);
 window.addEventListener("message",receiveConnectionResult);
+window.addEventListener("message",receiveExtensionReady);
+setInterval(probeCurrentExtension,10000);
+probeCurrentExtension();
 byId("find").oninput = renderInbox;
 function cleanInbox(action, path) {
   return run(async () => {
@@ -828,7 +926,10 @@ byId("package").onclick = () => run(async () => {
 byId("refresh").onclick = () => run(read);
 async function openRoute() {
   const route = new URLSearchParams(location.hash.slice(1));
-  selectedCourse = route.get("course") || "";
+  settingsOpen = location.hash === "#settings" || route.get("page") === "settings";
+  applyRouteVisibility();
+  if (settingsOpen) byId("platform-settings").open = true;
+  selectedCourse = settingsOpen ? "" : route.get("course") || "";
   detailOpen = !!selectedCourse && !!route.get("task");
   selectedTask = detailOpen ? route.get("task") : "";
   byId("report-path").value = "";
@@ -837,7 +938,8 @@ async function openRoute() {
   byId("notice").textContent = "";
   try {
     await read();
-    if (detailOpen && !byId("assignment").hidden) {
+    if (settingsOpen) {byId("settings-title").focus();window.scrollTo(0,0);}
+    else if (detailOpen && !byId("assignment").hidden) {
       byId("assignment").focus();
       byId("assignment").scrollIntoView({block: "start"});
     } else window.scrollTo(0, 0);

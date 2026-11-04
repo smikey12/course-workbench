@@ -260,3 +260,7 @@ section[aria-label="平台课程目录"] > :is(.card-head,.directory-controls,#d
 .platform-choices input { width:auto; }
 .platform-connection { margin-top:14px; padding:14px; border:1px solid #dcdcf0; border-radius:9px; background:#f7f7fd; }
 .platform-connection p { overflow-wrap:anywhere; }
+
+#workbench-view[hidden], #settings-view[hidden], #setup-hint[hidden] { display:none !important; }
+.settings-back { display:inline-block; margin:16px 0; color:#494895; }
+#setup-hint { padding:12px 16px; background:#efedff; border-radius:8px; }

@@ -291,7 +291,8 @@ def read_board(database=DATABASE, inbox=INBOX, task_id=TASK):
                                 reminderDismissed=record["reminderDismissed"], reminderReason=record["reminderReason"],
                                 deadlineState=record.get("deadlineState", ""),
                                 verified=record.get("observedAt", source["verificationDate"]),
-                                status=record.get("displayStatus", record["platformStatus"])))
+                                status=record.get("displayStatus", record["platformStatus"]),
+                                **{field: record[field] for field in ("publishedAt", "publishAt", "releasedAt", "startAt", "openAt", "availableAt", "endAt") if record.get(field)}))
     items, warnings = inbox_files(inbox, database)
     with closing(connect(database)) as conn:
         links = [dict(role=r, path=p, basis=b, available=Path(p).is_file())
