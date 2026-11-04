@@ -98,7 +98,7 @@ function navigate(course = "", task = "") {
 }
 
 function courseDirectory() {
-  const courses = new Map(board.courses.map(course => [course.id, {...course, platform: "雨课堂"}]));
+  const courses = new Map(board.courses.map(course => [course.id, {...course, platform: course.platform || "雨课堂"}]));
   for (const course of board.cxCourses || []) courses.set(course.id,course);
   for (const task of board.assignments) {
     if (!courses.has(task.courseId)) courses.set(task.courseId, {id: task.courseId, name: task.course,
@@ -151,14 +151,18 @@ function dueTime(task) {
   return Date.parse(task.verified) + ((Number(parts[1] || 0) * 24 + Number(parts[2] || 0)) * 60 + Number(parts[3] || 0)) * 60000;
 }
 
+function coverageIncomplete(course) {
+  return !course.checked || /部分读取|部分覆盖|尚未覆盖|清单不完整/.test(course.note || "");
+}
+
 function pendingSummary(course, tasks, now) {
   const pending = tasks.filter(t => taskKind(t) === "unfinished");
   const unknown = tasks.some(t => taskKind(t) === "unknown");
   if (!pending.length) {
-    const label = unknown ? "待核实" : !course.checked ? "待同步" : "0 项";
+    const label = unknown ? "待核实" : !course.checked ? "待同步" : coverageIncomplete(course) ? "待核实" : "0 项";
     return {count:label, hint:"", tone:"quiet", order:4};
   }
-  const count = (unknown ? "至少 " : "") + pending.length + " 项";
+  const count = (coverageIncomplete(course) ? "已收录 " : unknown ? "至少 " : "") + pending.length + " 项";
   const remaining = pending.map(t => dueTime(t) - now);
   const overdue = remaining.some(t => t <= 0) || pending.some(t => t.deadlineState === "已截止");
   const future = remaining.filter(t => t > 0);
@@ -172,6 +176,14 @@ function pendingSummary(course, tasks, now) {
   return {count, hint:"距截止超过 3 天", tone:"later", order:2};
 }
 
+function completedSummary(course, tasks) {
+  const completed = tasks.filter(t => taskKind(t) === "completed").length;
+  const unknown = tasks.some(t => taskKind(t) === "unknown");
+  if (completed) return (coverageIncomplete(course) ? "已收录 " : unknown ? "至少 " : "") + completed + " 项";
+  if (!course.checked) return "待同步";
+  return unknown || coverageIncomplete(course) ? "待核实" : "0 项";
+}
+
 function termForDate(day) {
   const year = Number(day.slice(0,4)), month = Number(day.slice(5,7));
   if (!year || !month) return "";
@@ -179,7 +191,7 @@ function termForDate(day) {
 }
 
 function courseTerm(course) {
-  const caption = course.section + " " + course.name;
+  const caption = [course.term, course.section, course.name].filter(Boolean).join(" ");
   const term = caption.match(/(20\d\d)\s*(?:年)?\s*([春秋])/);
   if (term) return term[1] + term[2];
   const schoolYear = caption.match(/(20\d\d)[-–](20\d\d)[-–]([12])(?:学期|\b)/);
@@ -203,7 +215,10 @@ function preferredTerm(courses, now) {
 }
 
 function compareCourses(a,b,term,mode) {
-  // 学期始终为第一排序条件，其他条件只影响同一优先组内的顺序。
+  // 先把真实待办放在零项/待同步之前，再在两组内保留学期与下拉排序。
+  // 学期未知不等于历史课程，不能让有待办的课程被本学期零项挤出默认六行。
+  const pending = Number(b.total > 0) - Number(a.total > 0);
+  if (pending) return pending;
   const priority = Number(b.term === term) - Number(a.term === term);
   if (priority) return priority;
   if (mode === "time") {
@@ -269,10 +284,9 @@ function renderTaskList() {
     && matches(task, task.course.toLowerCase().includes(query)));
   byId("alerts").hidden = !!selectedCourse || !courses.length;
   byId("alerts").classList.toggle("quiet", urgent.length === 0);
+  byId("alerts").dataset.priority = pendingSummary({checked:true}, urgent, Date.now()).tone;
   byId("alert-note").textContent = (urgent.length ? "" : "当前范围内的已收录作业，没有符合筛选条件的未完成项。") +
-    (platform === "学习通" ? learningNote() :
-    (board.sync.running ? " 雨课堂按课程轮流更新。" : " 雨课堂显示上次读取的记录。") +
-    (!platform ? learningNote() : "")) + " 已截止且未完成的作业只提醒一次，显示 8 秒后自动隐藏，可在课程的「已过期」中回看。截止满一个月的作业自动清理。";
+    platformSyncNote(platform) + " 已截止且未完成的作业只提醒一次，显示 8 秒后自动隐藏，可在课程的「已过期」中回看。截止满一个月的作业自动清理。";
   byId("alert-count").textContent = urgent.length + " 项";
   byId("more-alerts").hidden = urgent.length <= 3;
   byId("more-alerts").textContent = allAlerts ? "收起" : "展开全部 " + urgent.length + " 项";
@@ -358,13 +372,12 @@ function renderTaskList() {
         .some(item => item.title.toLowerCase().includes(query));
       if ((status || !courseMatch) && !feedMatch && !own.some(task => matches(task, courseMatch))) continue;
       const summary = pendingSummary(course, own, now);
-      const completed = own.filter(t => taskKind(t) === "completed").length;
-      summary.completed = completed || course.checked ? completed + " 项" : "待同步";
+      summary.completed = completedSummary(course, own);
       const total = own.filter(t => taskKind(t) === "unfinished").length;
       rows.push({course, summary, term:courseTerm(course), total: total || (summary.count === "0 项" ? 0 : -1)});
     }
     const visible = directoryExpanded ? rows.length : Math.min(PREVIEW_COURSES,rows.length);
-    byId("directory-info").textContent = term+" 优先 · 显示 "+visible+" / "+rows.length+" 门" +
+    byId("directory-info").textContent = "有待办优先 · "+term+" 优先 · 显示 "+visible+" / "+rows.length+" 门" +
       (rows.length !== courses.length ? "（全部 "+courses.length+" 门）" : "");
     if (!rows.length) {
       if (courses.length) list.append(node("p", "没有匹配的课程。试试清除搜索或筛选。"));
@@ -399,11 +412,20 @@ function renderTaskList() {
   }
 }
 
+function taskTone(task, kind, now = Date.now()) {
+  if (kind !== "unfinished") return kind;
+  const due = dueTime(task);
+  if (task.deadlineState === "已截止" || Number.isFinite(due) && due <= now) return "overdue";
+  if (!Number.isFinite(due)) return "unsure";
+  return due - now <= 72 * HOUR ? "unfinished" : "later";
+}
+
 function taskCard(task, kind) {
     const card = node("div", "", "task-card");
     const button = node("button", "", "task-summary");
     button.dataset.kind = kind;
-    const tone = kind === "unfinished" && task.deadlineState === "已截止" ? "overdue" : kind;
+    const tone = taskTone(task, kind);
+    button.dataset.priority = tone === "unfinished" || tone === "overdue" ? "urgent" : tone;
     const icon = tone === "completed" ? "✓ " : tone === "unknown" ? "? " : "! ";
     button.append(node("small", task.platform + " · " + task.course),
       node("b", task.title), node("span", icon + task.status, "pill"),
@@ -517,7 +539,8 @@ function render() {
   const completed = task.completionState === "已完成";
   const unfinished = task.completionState === "未完成";
   const overdue = unfinished && task.deadlineState === "已截止";
-  const tone = completed ? "completed" : overdue ? "overdue" : unfinished ? "unfinished" : "unknown";
+  const tone = taskTone({...task, deadline:task.deadlineDisplayed, verified:board.verified},
+    completed ? "completed" : unfinished ? "unfinished" : "unknown");
   const icon = completed ? "✓ " : unfinished ? "! " : "? ";
   byId("status").dataset.tone = tone;
   byId("status").textContent = icon + byId("status").textContent;
@@ -586,14 +609,32 @@ function renderSync(sync) {
   byId("sync-scope").textContent = "当前覆盖范围 · " + sync.scope;
   byId("sync-time").textContent = "最近目录检查 · " + (sync.lastSuccess ? new Date(sync.lastSuccess).toLocaleString("zh-CN") : "尚无成功同步");
   byId("cx-status").textContent = learningNote() + (board.cxSync?.checked ? " 最近目录检查 "+new Date(board.cxSync.checked).toLocaleString("zh-CN") : "");
+  byId("mooc-status").textContent = moocNote();
   const examFeed = board.feeds?.exams;
-  const ids = new Set(board.courses.filter(c => c.listed).map(c => c.id));
+  const rainCourses = board.courses.filter(c => c.listed && (c.platform || "雨课堂") === "雨课堂");
+  const ids = new Set(rainCourses.map(c => c.id));
   const unassigned = (examFeed?.items || []).filter(item => !ids.has(item.course));
-  const checked = board.courses.filter(c => c.listed && board.feeds?.[c.id]?.checked).length;
-  const failed = board.courses.filter(c => c.listed && board.feeds?.[c.id]?.issue).length;
+  const checked = rainCourses.filter(c => board.feeds?.[c.id]?.checked).length;
+  const failed = rainCourses.filter(c => board.feeds?.[c.id]?.issue).length;
   byId("feed-status").textContent = "课堂动态已有记录的班级 " + checked + "/" + ids.size +
     (failed ? "（" + failed + " 门待重试）" : "") + "。近期考试清单 · " + feedSummary(examFeed, examFeed?.items.length || 0) +
     (unassigned.length ? "。待匹配班级的考试：" + unassigned.map(item => item.title).join("、") : "");
+}
+function moocNote() {
+  const state = board.moocSync || {};
+  const courses = courseDirectory().filter(c => c.platform === "中国大学 MOOC");
+  const checked = courses.filter(c => c.checked).length;
+  const coverage = "中国大学 MOOC · 已检查作业 " + checked + "/" + courses.length + " 门";
+  if (state.issue) return coverage + " · " + (state.checked ? "本次未全部成功，保留上次记录" : "首次同步尚未全部成功") + " · " + state.issue;
+  if (!state.checked) return coverage + " · 等待首次成功同步，以各课程检查时间为准。";
+  return coverage + " · 最近全部成功 " + new Date(state.checked).toLocaleString("zh-CN") + "。";
+}
+function platformSyncNote(platform) {
+  const notes = [];
+  if (!platform || platform === "雨课堂") notes.push(board.sync.running ? "雨课堂按课程轮流更新。" : "雨课堂显示上次读取的记录。");
+  if (!platform || platform === "学习通") notes.push(learningNote());
+  if (!platform || platform === "中国大学 MOOC") notes.push(moocNote());
+  return " " + notes.join(" ");
 }
 function learningNote() {
   const courses=board.cxCourses || [];

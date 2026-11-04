@@ -55,6 +55,7 @@ def get(path):
 try:
     empty = get("/api/workbench?task=")
     assert empty["assignments"] == [] and empty["courses"] == [] and empty["cxCourses"] == []
+    assert not empty["moocSync"]["checked"] and not empty["moocSync"]["issue"]
     assert empty["task"] == {} and empty["files"] == [] and empty["links"] == []
     assert get("/api/catalog")["files"] == []
     course = COURSE_ROOT / "大一上" / "测试课程"
@@ -73,6 +74,20 @@ try:
     detail = get("/api/workbench?task=" + task["id"])
     assert detail["task"]["title"] == "测试作业" and detail["task"]["id"] == task["id"]
     assert get("/api/workbench?task=missing")["task"] == {}
+    platform_sync.receive({"action":"mooc", "courses":[{
+        "id":"101", "name":"MOOC测试课程", "section":"测试班", "checked":True,
+        "tasks":[{"id":"201", "title":"MOOC测试作业", "completion":"未完成",
+                  "status":"未提交", "deadlineAt":deadline}]}]})
+    mixed = get("/api/workbench?task=")
+    assert len(mixed["assignments"]) == 2 and mixed["task"] == {}
+    assert {task["platform"] for task in mixed["assignments"]} == {"雨课堂", "中国大学 MOOC"}
+    mooc_task = next(task for task in mixed["assignments"] if task["platform"] == "中国大学 MOOC")
+    assert mooc_task["courseId"] == "mooc-101"
+    assert get("/api/workbench?task=" + mooc_task["id"])["task"]["title"] == "MOOC测试作业"
+    platform_sync.receive({"action":"mooc", "courses":[{
+        "id":"101", "name":"MOOC测试课程", "checked":False, "issue":"模拟登录失效"}]})
+    failed = get("/api/workbench?task=")
+    assert len(failed["assignments"]) == 2 and "模拟登录失效" in failed["moocSync"]["issue"]
     print(json.dumps({"empty":True, "scan":True, "sync":True, "detail":True}))
 finally:
     httpd.shutdown()

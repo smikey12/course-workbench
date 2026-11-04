@@ -13,7 +13,7 @@ BASE = Path(__file__).resolve().parent
 FILES = (
     ".gitignore", "README.md", "VERSION", "UPDATE_FORMAT.md", "public_settings.py", "prepare_release.py",
     "updater.py", "test_updater.py", "launcher.py", "test_launcher.py", "test_prepare_release.py",
-    "test_public_release.py", "course_scope.py", "cx_sync.py", "inbox_cleanup.py",
+    "test_public_release.py", "test_board_display.cjs", "web/test_board_platforms.cjs", "mooc_sync.py", "test_mooc_sync.py", "course_scope.py", "cx_sync.py", "inbox_cleanup.py",
     "platform_sync.py", "rain_catalog.py", "retention.py", "server.py",
     "sync_courses.py", "workbench.py", "启动工具.cmd", "自动同步课程.cmd", "打开课藏.pyw",
     "web/board.html", "web/board.js", "web/board.css", "web/index.html",
@@ -21,6 +21,10 @@ FILES = (
     "雨课堂浏览器连接/background.js", "雨课堂浏览器连接/cx-reader.js",
     "雨课堂浏览器连接/cx-reader.html", "雨课堂浏览器连接/cx-access.js",
     "雨课堂浏览器连接/cx-access.html",
+    "雨课堂浏览器连接/mooc-reader.js", "雨课堂浏览器连接/mooc-background.js",
+    "雨课堂浏览器连接/mooc-access.js", "雨课堂浏览器连接/mooc-reader.test.cjs",
+    "雨课堂浏览器连接/mooc-background.test.cjs",
+
 )
 
 

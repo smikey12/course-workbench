@@ -23,7 +23,7 @@
       <button id="back-courses" hidden>← 全部课程</button>
       <div class="card-head"><h2 id="directory-title">平台课程目录</h2><input type="search" id="task-search" aria-label="搜索课程或作业" placeholder="搜索课程或作业"></div>
       <p class="muted" id="directory-info"></p>
-      <div class="directory-controls"><div class="input-row"><label for="platform-filter">平台</label><select id="platform-filter"><option value="">全部平台</option><option>雨课堂</option><option>学习通</option></select>
+      <div class="directory-controls"><div class="input-row"><label for="platform-filter">平台</label><select id="platform-filter"><option value="">全部平台</option><option>雨课堂</option><option>学习通</option><option>中国大学 MOOC</option></select>
       <label for="list-status">作业状态</label><select id="list-status"><option value="">全部状态</option><option value="unfinished">未完成</option><option value="unknown">待核实</option><option value="completed">已完成</option><option value="missed">过期未做</option><option value="dismissed">无需提醒</option></select></div>
       <div id="directory-sort" class="directory-sort">
         <label>优先学期 <select id="preferred-term"><option value="">本学期</option></select></label>
@@ -35,11 +35,13 @@
     <section id="sync-panel" aria-label="平台同步"><div class="card-head"><h2>平台同步</h2><div><button id="sync-start" disabled>正在检查连接…</button> <button id="sync-stop" disabled>暂停接收</button></div></div><p id="sync-message" role="status"></p><p id="sync-error" role="alert"></p><p id="sync-scope" class="muted"></p><p id="sync-time" class="muted"></p>
       <p id="feed-status" class="muted"></p>
       <p id="cx-status" class="muted" role="status"></p>
+      <p id="mooc-status" class="muted" role="status"></p>
       <details id="course-history" hidden><summary></summary><div id="scope-list"></div></details>
       <details id="connector-help"><summary>浏览器连接步骤</summary>
         <p>保持已安装扩展的 Chromium 浏览器（如 Chrome、Edge）和本地工作台服务运行。扩展每分钟读取账号课程目录，分批检查各班的章节作业。平时可以关掉课程标签页；提示登录过期时，去<a href="https://www.yuketang.cn/web">雨课堂</a>登录一次。</p>
         <p>首次安装时，在浏览器的扩展管理页面打开开发者模式，点击「加载已解压的插件程序」，选择项目目录中的「雨课堂浏览器连接」文件夹。</p>
         <p>要连接学习通，请在同一浏览器登录<a href="https://mooc1-api.chaoxing.com/work/stu-work">学习通作业列表</a>。点击「课藏」扩展并选择「允许读取学习通课程与作业」。之后可以关闭课程标签页。</p>
+        <p>中国大学 MOOC 的连接状态显示在上方。请在已安装课藏扩展的浏览器登录该平台；课程与作业以实际读取结果为准。</p>
         <p class="muted">学习通按班级轮流检查。查看目录里的班级检查时间与「待重试」提示，即可判断数据是否已经读全。</p>
       </details>
     </section>

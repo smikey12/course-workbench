@@ -23,6 +23,12 @@ def expired(value, now=None):
 
 
 def clean(conn, now=None):
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE name='mooc_work'").fetchone():
+        for rid, course, due in conn.execute("SELECT id,course,due FROM mooc_work WHERE due IS NOT NULL").fetchall():
+            if expired(due,now):
+                conn.execute("DELETE FROM mooc_work WHERE id=?",(rid,))
+                conn.execute("""UPDATE mooc_courses SET note=(SELECT count(*) FROM mooc_work WHERE course=?) || ' 项保留作业'
+                    WHERE id=? AND note LIKE '%项保留作业'""",(course,course))
     for rid, course, due in conn.execute("SELECT id,course,due FROM cx_work WHERE due IS NOT NULL").fetchall():
         if expired(due,now):
             conn.execute("DELETE FROM cx_work WHERE id=?",(rid,))

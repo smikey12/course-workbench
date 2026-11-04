@@ -5,6 +5,7 @@ import threading
 import rain_catalog
 import retention
 import cx_sync
+import mooc_sync
 import course_scope
 import time
 from contextlib import closing
@@ -49,13 +50,16 @@ def collector_status():
     state = status()
     with closing(rain_catalog.open_db(DATABASE)) as conn:
         cx = dict(conn.execute("SELECT key,value FROM cx_meta"))
+        mooc = dict(conn.execute("SELECT key,value FROM mooc_meta"))
         def rows(table):
             return [dict(r) for r in conn.execute(f"SELECT id,name,checked,attempted,note FROM active_{table} ORDER BY name,id")]
         history = course_scope.history(conn)
         def skipped(platform):
             return sum(r["platform"]==platform and not r["pinned"] for r in history)
         return {"enabled":state["enabled"],"rain":{"directory":state["lastSuccess"],"message":state["message"],"courses":rows("courses"),"skipped":skipped("雨课堂")},
-                "cx":{"directory":cx.get("checked"),"message":cx.get("issue",""),"access":CX_ACCESS,"courses":rows("cx_groups"),"skipped":skipped("学习通")}}
+                "cx":{"directory":cx.get("checked"),"message":cx.get("issue",""),"access":CX_ACCESS,"courses":rows("cx_groups"),"skipped":skipped("学习通")},
+                "mooc":{"directory":mooc.get("checked"),"message":mooc.get("issue",""),
+                        "courses":rows("mooc_courses"),"skipped":skipped(mooc_sync.PLATFORM)}}
 
 
 def pin_course(key, keep):
@@ -134,7 +138,7 @@ def restore():
     if DATABASE.exists():
         with closing(rain_catalog.open_db(DATABASE)) as conn, conn:
             values = dict(conn.execute("SELECT key,value FROM sync_meta"))
-            for name in ("rain","cx"):
+            for name in ("rain","cx","mooc"):
                 course_scope.refresh(conn,name,datetime.now(retention.CST))
         STATE.update(lastSuccess=values.get("lastSuccess"))
         if values.get("enabled") == "0":
@@ -184,7 +188,7 @@ def receive(payload):
         if type(payload.get("cxAccess")) is bool:
             CX_ACCESS = {"allowed":payload["cxAccess"],"at":datetime.now(timezone.utc).isoformat()}
         return {"enabled": status()["enabled"]}
-    if action in ("index", "course", "courseIssue", "issue", "feed", "chaoxing"):
+    if action in ("index", "course", "courseIssue", "issue", "feed", "chaoxing", "mooc"):
         now = datetime.now(timezone.utc).isoformat()
         with LOCK:
             if not STATE["enabled"]:
@@ -193,6 +197,10 @@ def receive(payload):
                 STATE.update(running=False, message=rain_catalog.label(payload.get("message")))
                 return {"ok": True}
             with closing(rain_catalog.open_db(DATABASE)) as conn, conn:
+                if action == "mooc":
+                    result = mooc_sync.receive(conn,payload,now)
+                    retention.clean(conn)
+                    return result
                 if action == "chaoxing":
                     result = cx_sync.receive(conn,payload,now)
                     return sweep_queue(conn,"cx",result) if "next" in result else result

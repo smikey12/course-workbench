@@ -11,7 +11,7 @@ ACTIONABLE_AFTER_DUE = {"可补交", "待补交", "允许补交", "可补做", "
 def install(conn):
     conn.execute("""CREATE TABLE IF NOT EXISTS course_scope (
         id TEXT PRIMARY KEY, ended TEXT, reason TEXT NOT NULL DEFAULT '', pinned INTEGER NOT NULL DEFAULT 0)""")
-    for table in ("courses", "cx_groups"):
+    for table in ("courses", "cx_groups", "mooc_courses"):
         conn.execute(f"""CREATE VIEW IF NOT EXISTS active_{table} AS SELECT c.* FROM {table} c
             WHERE c.listed=1 AND NOT EXISTS (SELECT 1 FROM course_scope s
                 WHERE s.id=c.id AND s.reason<>'' AND s.pinned=0)""")
@@ -66,12 +66,12 @@ def reason(course, tasks, now):
 
 
 def refresh(conn, platform, now):
-    table = "courses" if platform == "rain" else "cx_groups"
-    section = "c.section" if platform == "rain" else "''"
+    table = {"rain":"courses", "cx":"cx_groups", "mooc":"mooc_courses"}[platform]
+    section = "c.section || ' ' || c.term" if platform == "mooc" else ("c.section" if platform == "rain" else "''")
     rows = conn.execute(f"""SELECT c.id,c.name,{section} AS section,c.checked,c.attempted,c.note,d.started,s.ended
         FROM {table} c LEFT JOIN course_dates d USING(id) LEFT JOIN course_scope s USING(id) WHERE c.listed=1""")
     sql = ("SELECT json_extract(record,'$.courseId'),record FROM tasks WHERE COALESCE(json_extract(record,'$.listed'),1)"
-           if platform == "rain" else "SELECT course,body FROM cx_work")
+           if platform == "rain" else "SELECT course,body FROM " + ("mooc_work" if platform == "mooc" else "cx_work"))
     grouped = {}
     for key, raw in conn.execute(sql):
         grouped.setdefault(key,[]).append(json.loads(raw))
@@ -91,5 +91,6 @@ def refresh(conn, platform, now):
 def history(conn):
     return [dict(r) for r in conn.execute("""SELECT c.*,s.reason,s.pinned FROM
         (SELECT id,name,'雨课堂' AS platform FROM courses WHERE listed=1
-         UNION ALL SELECT id,name,'学习通' FROM cx_groups WHERE listed=1) c
+         UNION ALL SELECT id,name,'学习通' FROM cx_groups WHERE listed=1
+         UNION ALL SELECT id,name,'中国大学 MOOC' FROM mooc_courses WHERE listed=1) c
         JOIN course_scope s USING(id) WHERE s.reason<>'' OR s.pinned=1 ORDER BY platform,name,id""")]

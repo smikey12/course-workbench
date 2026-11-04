@@ -142,19 +142,33 @@ label { display: block; font-size: 13px; margin-bottom: 4px; color: #4f5877; }
 .task-summary small { font-size: 12px; }
 .card-deadline { font-size: 13px; color: #535e7a; }
 .task-summary[data-kind="unfinished"] {
+  --task-ink: #5e5274; --task-border: #c7bed7; --task-accent: #847198;
+  --task-bg: #f7f5fb; --task-hover: #efebf6;
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 3px 12px;
-  color: #85172a;
-  border: 1px solid #d88b98;
-  border-left: 6px solid #b3233b;
-  background: #fff0f1;
+  color: var(--task-ink);
+  border: 1px solid var(--task-border);
+  border-left: 6px solid var(--task-accent);
+  background: var(--task-bg);
 }
-.task-summary[data-kind="unfinished"]:hover { background: #ffe3e7; border-color: #b3233b; }
+.task-summary[data-priority="urgent"] {
+  --task-ink: #85172a; --task-border: #d88b98; --task-accent: #b3233b;
+  --task-bg: #fff0f1; --task-hover: #ffe3e7;
+}
+.task-summary[data-priority="later"] {
+  --task-ink: #854700; --task-border: #d9b17a; --task-accent: #b66a10;
+  --task-bg: #fff7e9; --task-hover: #ffeed4;
+}
+.task-summary[data-kind="unfinished"]:hover { background: var(--task-hover); border-color: var(--task-accent); }
 .task-summary[data-kind="unfinished"] b { font-size: 19px; grid-column: 1; }
 .task-summary[data-kind="unfinished"] .pill { grid-column: 2; grid-row: 1 / 3; }
-.task-summary[data-kind="unfinished"] .card-deadline { grid-column: 1 / -1; color: #89182c; font-weight: 650; }
+.task-summary[data-kind="unfinished"] .card-deadline { grid-column: 1 / -1; color: var(--task-ink); font-weight: 650; }
+[data-tone="later"] { color: #854700; }
+.pill[data-tone="later"] { background: #fff0d5; border-color: #ddb37b; color: #854700; }
+[data-tone="unsure"] { color: #5e5274; }
+.pill[data-tone="unsure"] { background: #efebf6; border-color: #c7bed7; color: #5e5274; }
 #task-count { font-size: 14px; color: #62518b; }
 #sync-message { margin-top: 12px; padding: 10px 14px; border-radius: 8px; background: #f1f1f6; color: #42445a; }
 #sync-message[data-state="waiting"] { background: #fff3dc; color: #704200; }
@@ -223,7 +237,8 @@ section[aria-label="平台课程目录"] > :is(.card-head,.directory-controls,#d
 .dismissed-line button { flex-shrink: 0; }
 #reminder-toggle { margin-block: 8px 16px; }
 #alert-count { font-size: 15px; color: #981b30; }
-#alerts.quiet #alert-count { color: #555e7e; }
+#alerts.quiet #alert-count, #alerts[data-priority="unsure"] #alert-count { color: #555e7e; }
+#alerts[data-priority="later"] #alert-count { color: #995000; }
 .feed { margin: 12px 0; }
 .feed-line { display: grid; gap: 2px; padding: 6px 0; border-bottom: 1px solid #edf0f8; }
 .feed-line small { color: #58627c; }

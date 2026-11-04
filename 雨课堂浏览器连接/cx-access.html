@@ -1,4 +1,12 @@
 <!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>课藏 · 平台连接</title>
-<body style="min-width:260px;font:15px system-ui;color:#30355b;padding:12px"><b>课藏 · 学习通连接</b>
+<body style="min-width:260px;font:15px system-ui;color:#30355b;padding:12px">
+<p style="margin:0 0 16px"><a id="back-workbench" href="http://127.0.0.1:8765/" target="_blank" rel="noopener noreferrer">← 返回课藏工作台</a></p>
+<b>课藏 · 学习通连接</b>
 <p>使用当前浏览器登录，每分钟检查课程目录，并分批读取班级作业。</p><button id="grant">允许读取学习通课程与作业</button>
-<p id="message" role="status"></p><script src="cx-access.js"></script></body></html>
+<p id="message" role="status"></p>
+<hr><b>中国大学 MOOC（独立授权）</b>
+<p>复用当前浏览器的登录，每 5 分钟只读检查普通 MOOC、学校专有课程的章节作业与测验；单轮最多读取 90 秒。首次使用请先在官网手动登录。</p>
+<button id="mooc-grant" type="button">允许读取中国大学 MOOC</button>
+<p id="mooc-message" role="status"></p>
+<p style="font-size:12px">不读取答题纸，不开始答题或提交。期末考试、课内随堂练习、OJ、智慧课、付费专栏以及同步源课程暂未覆盖；未知状态显示待核实。可在浏览器的扩展权限中撤销授权。</p>
+<script src="cx-access.js"></script><script src="mooc-access.js"></script></body></html>

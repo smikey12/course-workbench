@@ -1,6 +1,7 @@
 """验证发布白名单、可重现打包、版本与敏感运行目录排除。"""
 import hashlib
 import json
+import re
 import tempfile
 import unittest
 import zipfile
@@ -11,6 +12,17 @@ import prepare_release as release
 
 
 class ReleaseBuildTests(unittest.TestCase):
+    def test_extension_runtime_dependencies_are_in_release(self):
+        snapshot = release.source_snapshot()
+        prefix = "雨课堂浏览器连接/"
+        manifest = json.loads(snapshot[prefix + "manifest.json"])
+        worker = prefix + manifest["background"]["service_worker"]
+        self.assertIn(worker, snapshot)
+        for script in re.findall(r'"([^" ]+\.js)"', snapshot[worker].decode("utf-8-sig").split("const remote", 1)[0]):
+            self.assertIn(prefix + script, snapshot, "service worker import missing from ZIP")
+        for script in re.findall(r'<script src="([^"]+)"', snapshot[prefix + "cx-access.html"].decode("utf-8-sig")):
+            self.assertIn(prefix + script, snapshot, "popup dependency missing from ZIP")
+
     def test_full_release_package_is_accepted_by_updater(self):
         import updater
         snapshot = release.source_snapshot()

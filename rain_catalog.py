@@ -5,6 +5,7 @@ import sqlite3
 from datetime import date
 import retention
 import course_scope
+import mooc_sync
 from datetime import datetime, timedelta, timezone
 
 CHINA = timezone(timedelta(hours=8))
@@ -39,6 +40,7 @@ def open_db(path):
     conn.execute("CREATE TABLE IF NOT EXISTS course_dates (id TEXT PRIMARY KEY, started TEXT NOT NULL)")
     conn.execute("""CREATE TABLE IF NOT EXISTS feeds (
         scope TEXT PRIMARY KEY, checked TEXT DEFAULT '', attempted TEXT, issue TEXT, items TEXT DEFAULT '[]')""")
+    mooc_sync.install(conn)
     course_scope.install(conn)
     return conn
 
